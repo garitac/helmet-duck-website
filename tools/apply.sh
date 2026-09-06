@@ -42,7 +42,12 @@ echo "== stack $FRONTEND_STACK ($REGION): certificate, bucket, distribution, DNS
 # Parameters not named here keep their stored values, so an apply without the
 # alert address leaves the alerts as they are instead of deleting them.
 FRONTEND_PARAMS=("SiteDomain=$DOMAIN" "HostedZoneId=$ZONE")
-[ -n "${HELMET_DUCK_ALERT_EMAIL:-}" ] && FRONTEND_PARAMS+=("AlertEmail=$HELMET_DUCK_ALERT_EMAIL")
+case "${HELMET_DUCK_ALERT_EMAIL:-}" in
+  *@example.com|*@example.org|*@example.net)
+    echo "refusing: HELMET_DUCK_ALERT_EMAIL is the placeholder '$HELMET_DUCK_ALERT_EMAIL'; alerts sent there reach nobody"; exit 1 ;;
+  "") ;;
+  *) FRONTEND_PARAMS+=("AlertEmail=$HELMET_DUCK_ALERT_EMAIL") ;;
+esac
 
 echo "== mail: is there an Amazon WorkMail organization for $DOMAIN?"
 # The zone's mail records follow WorkMail when the organization exists (tools/mail.sh
@@ -87,7 +92,7 @@ DIST="$(out "$FRONTEND_STACK" DistributionId)"
 CFDOMAIN="$(out "$FRONTEND_STACK" DistributionDomainName)"
 LOGS="$(out "$FRONTEND_STACK" LogBucketName)"
 echo "bucket $BUCKET  distribution $DIST  $CFDOMAIN"
-echo "logs $LOGS  alerts ${HELMET_DUCK_ALERT_EMAIL:+configured}${HELMET_DUCK_ALERT_EMAIL:-not configured (no email given)}"
+if [ -n "${HELMET_DUCK_ALERT_EMAIL:-}" ]; then echo "logs $LOGS  alerts: set to the given address"; else echo "logs $LOGS  alerts: unchanged (no address given)"; fi
 
 echo "== GitHub OIDC provider in this account"
 PROVIDER="$(aws iam list-open-id-connect-providers --profile "$PROFILE" --output text \
