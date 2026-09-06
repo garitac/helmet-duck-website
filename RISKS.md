@@ -12,8 +12,9 @@ risks on your behalf.
 
 ## What it can and cannot do to your system
 
-- It can refuse an action your agent attempts through the Bash, Write or Edit
-  tools, stop a turn from ending, and add text to the agent's context.
+- It can refuse an action your agent attempts through the shell, file-edit and
+  patch tools (Bash, Write, Edit and Codex's apply_patch), stop a turn from
+  ending, and add text to the agent's context.
 - It cannot run commands of its own, modify your files, delete anything, or make
   an agent do anything. It only refuses, advises and records.
 - It writes only under `~/.helmet-duck`. Its only network connection is a

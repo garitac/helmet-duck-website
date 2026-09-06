@@ -15,7 +15,7 @@ agents and got no product back. The agents worked from memory instead of reading
 the tree, appended notes to files they had never opened, committed without running
 the tests, spawned audits of audits, and asserted every wrong thing with full
 confidence. The first version of these hooks, installed on 2026-09-05, caught the
-agent 242 times in its first week. This is that harness, generalised.
+agent 242 times in its first week. This is that harness, generalised, for Claude Code and Codex.
 
 ## What it does
 
@@ -66,6 +66,14 @@ duck seal
 
 Uninstall with `/plugin uninstall helmet-duck@helmet-duck`; deleting `~/.helmet-duck`
 removes every record it kept.
+
+## Install (Codex)
+
+Same duck, same gates. Codex edits files through `apply_patch`, and the duck reads
+the paths out of each patch. See [codex/README.md](codex/README.md): copy
+`codex/hooks.json` to `~/.codex/hooks.json` with the path filled in, trust the hooks
+in `/hooks`, then `accept` and `seal`. The Codex plugin manifest is
+`.codex-plugin/plugin.json`.
 
 To arm G2 in a project, add `.helmet-duck.json` at its root:
 

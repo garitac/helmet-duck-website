@@ -7,7 +7,7 @@
       "name": "helmet-duck",
       "source": "./",
       "description": "Gates, dissent chair and mirror for Claude Code: the rules an agent cannot skip.",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }

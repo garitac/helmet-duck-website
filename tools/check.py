@@ -34,6 +34,7 @@ def check_selftest(rows):
 
 def check_manifests(rows):
     for rel in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json", "hooks/hooks.json",
+                ".codex-plugin/plugin.json", "codex/hooks.json",
                 "fixtures/gates.json", "fixtures/dissent.json"):
         try:
             json.loads((ROOT / rel).read_text(encoding="utf-8"))
@@ -41,15 +42,20 @@ def check_manifests(rows):
         except (OSError, ValueError) as exc:
             rows.append((rel, False, str(exc)[:80]))
     try:
-        hooks = json.loads((ROOT / "hooks/hooks.json").read_text())["hooks"]
         missing = []
-        for event, groups in hooks.items():
-            for g in groups:
-                for h in g["hooks"]:
-                    for m in re.finditer(r'\$\{CLAUDE_PLUGIN_ROOT\}/([\w./-]+)', h["command"]):
-                        if not (ROOT / m.group(1)).exists():
-                            missing.append("%s: %s" % (event, m.group(1)))
+        for rel in ("hooks/hooks.json", "codex/hooks.json"):
+            hooks = json.loads((ROOT / rel).read_text())["hooks"]
+            for event, groups in hooks.items():
+                for g in groups:
+                    for h in g["hooks"]:
+                        for m in re.finditer(r'\$\{?(?:CLAUDE_)?PLUGIN_ROOT\}?/([\w./-]+)', h["command"]):
+                            if not (ROOT / m.group(1)).exists():
+                                missing.append("%s %s: %s" % (rel, event, m.group(1)))
         rows.append(("hooks reference existing files", not missing, ", ".join(missing)))
+        codex = json.loads((ROOT / ".codex-plugin/plugin.json").read_text())
+        refs = [codex.get("hooks", ""), codex.get("skills", ""), (codex.get("interface") or {}).get("logo", "")]
+        bad = [r for r in refs if r and not (ROOT / r).exists()]
+        rows.append(("codex manifest paths exist", not bad, ", ".join(bad)))
     except (OSError, ValueError, KeyError) as exc:
         rows.append(("hooks reference existing files", False, str(exc)[:80]))
 

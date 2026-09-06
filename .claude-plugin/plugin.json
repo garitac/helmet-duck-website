@@ -1,7 +1,7 @@
 {
   "name": "helmet-duck",
   "description": "The rules an AI coding agent cannot skip: gates that refuse blind overwrites, unevidenced commits and known-bad commands; a dissent chair that asks the one question a real check would have asked; a mirror that opens every session with how often the machinery caught the agent.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": {"name": "Carlos Garita"},
   "homepage": "https://helmetduck.com",
   "repository": "https://github.com/garitac/helmet-duck",

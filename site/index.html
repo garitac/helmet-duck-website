@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Helmet Duck — the rules an AI coding agent cannot skip</title>
-  <meta name="description" content="Helmet Duck is a Claude Code plugin of gates, a dissent chair and a mirror: hooks that refuse blind overwrites, unevidenced commits and known-bad commands, and open every session with how often the machinery caught the agent.">
+  <meta name="description" content="Helmet Duck is a plugin of gates, a dissent chair and a mirror for Claude Code and Codex: hooks that refuse blind overwrites, unevidenced commits and known-bad commands, and open every session with how often the machinery caught the agent.">
   <link rel="canonical" href="https://helmetduck.com/">
   <link rel="stylesheet" href="/styles.css">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -60,8 +60,8 @@
     </section>
 
     <section>
-      <h2>Install</h2>
-      <p>Read the <a href="/risks.html">risks and mitigations</a> first; installing means you accept them. Then Claude Code, two commands. Python 3.9 or later, standard library only. Nothing leaves your machine except a licence activation you start yourself.</p>
+      <h2>Install (Claude Code)</h2>
+      <p>Read the <a href="/risks.html">risks and mitigations</a> first; installing means you accept them. Then two commands. Python 3.9 or later, standard library only. Nothing leaves your machine except a licence activation you start yourself.</p>
 <pre><code>/plugin marketplace add garitac/helmet-duck
 /plugin install helmet-duck@helmet-duck</code></pre>
       <p>The duck refuses nothing until you record your acceptance, which arms the gates. Then seal the installed copy so an edited duck fails closed.</p>
@@ -69,7 +69,8 @@
 duck seal</code></pre>
       <p>To arm the commit gate in a project, declare its check command in <code>.helmet-duck.json</code> at the project root:</p>
 <pre><code>{"evidence": {"command": "python3 -m pytest -q"}}</code></pre>
-      <p>Codex support follows in the next version; the same script already speaks Codex's hook protocol.</p>
+      <h2>Install (Codex)</h2>
+      <p>Codex sends the same hook events and accepts the same answers; only its file-edit tool differs, and the duck reads the paths out of each patch. Clone the repository somewhere permanent, copy <code>codex/hooks.json</code> to <code>~/.codex/hooks.json</code> with <code>$PLUGIN_ROOT</code> replaced by that path, then run <code>/hooks</code> inside Codex and trust each hook. Codex runs no hook you have not reviewed. Then accept and seal as above. The plugin manifest for Codex's marketplace ships in the repository too.</p>
     </section>
 
     <section>

@@ -1,9 +1,9 @@
 {
- "duck_sha256": "49444807ab68f42e75e628ab3e07ceedb007d1e9271c240a3dd78364dd67ff0e",
+ "duck_sha256": "79aa492a00e1fcbee8bff8bc041127a29a0af8039b033fcd2edeee95346e5ffb",
  "fixtures_sha256": {
   "dissent.json": "d41249a1cb6af2867ed72eeafa652a0f9b88c75e7e40c1ad06bfe90e8ecb184c",
-  "gates.json": "6c25696cf946ec23df01f10fbf1f872a27483109436725ac64e0b2db1264bdfb"
+  "gates.json": "5a01dd38145e25bc1fb4442c4e69b3142df938b1f2718ea1a3ec3a1ff1f16ed1"
  },
- "version": "0.2.0",
- "sealed_at": 1788672221
+ "version": "0.3.0",
+ "sealed_at": 1788679868
 }

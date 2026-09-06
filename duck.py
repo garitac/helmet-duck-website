@@ -62,6 +62,14 @@ ACCEPTANCE OF RISK
   one-line notice saying so. Acceptance records the version, the time and the
   hash of the RISKS.md the user accepted, under the state directory.
 
+TWO HARNESSES
+  Claude Code and Codex send the same hook events with the same field names and
+  accept the same JSON answer. Claude edits files through Write and Edit; Codex
+  edits through apply_patch, whose patch text arrives in tool_input.command, so
+  the duck reads the file paths out of the patch headers and applies G4 and G1
+  to them exactly as it does to Write and Edit. The mirror sweeps both harnesses'
+  transcripts. hooks/hooks.json is for Claude Code, codex/hooks.json for Codex.
+
 THE LICENCE (the only network call the duck ever makes, and only when asked)
   `duck licence activate KEY` sends the key and a label for this machine to the
   licence vendor's public License API once, records the answer under the state
@@ -81,12 +89,15 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 HOME = pathlib.Path.home()
 ROOT = pathlib.Path(__file__).resolve().parent
 STATE = pathlib.Path(os.environ.get("HELMET_DUCK_STATE", str(HOME / ".helmet-duck")))
 OVERRIDE = pathlib.Path(os.environ.get("HELMET_DUCK_OVERRIDE", str(STATE / "OVERRIDE")))
-HARNESS = os.environ.get("HELMET_DUCK_HARNESS", "claude")          # claude | codex
+# Which harness is calling: Claude Code or Codex. Both understand the same hook JSON, so
+# this is recorded for the log and the status line rather than used to change behavior.
+HARNESS = os.environ.get("HELMET_DUCK_HARNESS") or (
+    "codex" if os.environ.get("PLUGIN_ROOT") and not os.environ.get("CLAUDE_PLUGIN_ROOT") else "claude")
 USER_CONFIG = STATE / "config.json"
 PROJECT_CONFIG = ".helmet-duck.json"
 CLAIMS = STATE / "claims.jsonl"
@@ -280,14 +291,30 @@ def _mentioned_paths(cmd, cwd):
 
 
 def _deny(gate, reason):
-    text = "GATE %s: %s" % (gate, reason)
-    if HARNESS == "codex":
-        sys.stderr.write(text + "\n")
-        sys.exit(2)
+    # One answer for both harnesses: Claude Code and Codex both read this JSON.
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
-        "permissionDecisionReason": text}}))
+        "permissionDecisionReason": "GATE %s: %s" % (gate, reason)}}))
+
+
+_PATCH_FILE = re.compile(r"^\*\*\* (Add|Update|Delete) File: (.+?)\s*$", re.M)
+_PATCH_MOVE = re.compile(r"^\*\*\* Move to: (.+?)\s*$", re.M)
+PATCH_TOOLS = ("apply_patch", "ApplyPatch")
+
+
+def _patch_paths(text, cwd):
+    """(operation, absolute path) for every file a Codex apply_patch touches."""
+    out = []
+    for m in _PATCH_FILE.finditer(text):
+        p = _norm(m.group(2), cwd)
+        if p:
+            out.append((m.group(1), p))
+    for m in _PATCH_MOVE.finditer(text):
+        p = _norm(m.group(1), cwd)
+        if p:
+            out.append(("Move", p))
+    return out
 
 
 # --------------------------------------------------------------------- gates
@@ -306,6 +333,25 @@ def gate_pre(ev, cfg, root):
             return "G4", ("%s is protected: the duck, its state, the harness settings and the "
                           "override are edited only by the owner. If this change is wanted, "
                           "the owner runs `duck override` from a terminal." % p)
+        return None, None
+
+    if tool in PATCH_TOOLS:
+        # Codex edits files through a patch; its headers name every file touched.
+        text = str(ti.get("command") or ti.get("patch") or ti.get("input") or "")
+        paths = _patch_paths(text, cwd)
+        if gates.get("G4"):
+            for _, p in paths:
+                if _under(p, protected):
+                    return "G4", ("%s is protected: the duck, its state, the harness settings and "
+                                  "the override are edited only by the owner (`duck override` opens "
+                                  "them for 30 minutes)." % p)
+        if gates.get("G1"):
+            reads = set(_state(sid).get("reads", []))
+            for op, p in paths:
+                if op == "Update" and not _under(p, cfg["exempt_roots"]) and os.path.isfile(p) and p not in reads:
+                    return "G1", ("patch to %s, which was not read this session. Read it first "
+                                  "(cat, sed -n or grep it), then patch. Blind edits of existing "
+                                  "files are how notes get appended unread." % p)
         return None, None
 
     cmd = str(ti.get("command", ""))
@@ -412,6 +458,10 @@ def cmd_post(ev):
     elif tool == "Grep":
         p = _norm(str(ti.get("path", "")), cwd)
         if p and os.path.isfile(p):
+            reads.add(p)
+    elif tool in PATCH_TOOLS:
+        text = str(ti.get("command") or ti.get("patch") or ti.get("input") or "")
+        for _, p in _patch_paths(text, cwd):
             reads.add(p)
     elif tool == "Bash":
         cmd = str(ti.get("command", ""))
@@ -613,11 +663,9 @@ def cmd_dissent(ev):
     except Exception:
         cards = []                          # advisory never breaks a call
     if cards:
-        if HARNESS == "codex":
-            sys.stderr.write("\n".join(cards) + "\n")
-        else:
-            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                                     "additionalContext": "\n".join(cards)}}))
+        # additionalContext is read by both harnesses
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                                 "additionalContext": "\n".join(cards)}}))
     return 0
 
 
@@ -635,41 +683,51 @@ TEST_MARKERS = re.compile(r"selftest|self-test|PASS|passed|pytest|unittest|expec
 TS_RE = re.compile(r'"timestamp"\s*:\s*"([0-9T:.\-+Z]{19,35})"')
 
 
+# (root, the marker a line must carry to be a TOOL RESULT rather than the agent's own words, lane label)
+TRANSCRIPT_ROOTS = (
+    (TRANSCRIPTS, '"tool_result"', None),                                  # Claude Code: one dir per project
+    (HOME / ".codex" / "sessions", '"function_call_output"', "codex"),      # Codex rollouts
+    (HOME / ".codex" / "archived_sessions", '"function_call_output"', "codex"),
+)
+
+
 def mirror_sweep(days):
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     events, files = [], 0
-    if not TRANSCRIPTS.exists():
-        print("mirror: no transcripts at %s" % TRANSCRIPTS)
+    roots = [(r, m, l) for r, m, l in TRANSCRIPT_ROOTS if r.exists()]
+    if not roots:
+        print("mirror: no transcripts found under %s" % ", ".join(str(r) for r, _, _ in TRANSCRIPT_ROOTS))
         return
-    for f in TRANSCRIPTS.rglob("*.jsonl"):
-        try:
-            mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
-        except OSError:
-            continue
-        if mtime < cutoff:
-            continue
-        lane = f.relative_to(TRANSCRIPTS).parts[0]
-        files += 1
-        try:
-            with open(f, errors="replace") as handle:
-                for line in handle:
-                    if '"tool_result"' not in line:
-                        continue        # what the MACHINE said, never what the agent wrote
-                    for kind, sig in SIGNATURES:
-                        m = sig.search(line)
-                        if not m:
-                            continue
-                        ts = TS_RE.search(line)
-                        at = ts.group(1) if ts else mtime.isoformat(timespec="seconds")
-                        if at[:10] < cutoff.isoformat()[:10]:
+    for root, marker, label in roots:
+        for f in root.rglob("*.jsonl"):
+            try:
+                mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+            except OSError:
+                continue
+            if mtime < cutoff:
+                continue
+            lane = label or f.relative_to(root).parts[0]
+            files += 1
+            try:
+                with open(f, errors="replace") as handle:
+                    for line in handle:
+                        if marker not in line:
+                            continue        # what the MACHINE said, never what the agent wrote
+                        for kind, sig in SIGNATURES:
+                            m = sig.search(line)
+                            if not m:
+                                continue
+                            ts = TS_RE.search(line)
+                            at = ts.group(1) if ts else mtime.isoformat(timespec="seconds")
+                            if at[:10] < cutoff.isoformat()[:10]:
+                                break
+                            events.append({"at": at, "lane": lane, "kind": kind,
+                                           "detail": (m.group(1) or "").strip()[:120] if m.groups() else "",
+                                           "in_test": bool(TEST_MARKERS.search(line)),
+                                           "transcript": f.name})
                             break
-                        events.append({"at": at, "lane": lane, "kind": kind,
-                                       "detail": (m.group(1) or "").strip()[:120] if m.groups() else "",
-                                       "in_test": bool(TEST_MARKERS.search(line)),
-                                       "transcript": f.name})
-                        break
-        except OSError:
-            continue
+            except OSError:
+                continue
     MIRROR_STATE.mkdir(parents=True, exist_ok=True)
     with (MIRROR_STATE / "events.jsonl").open("w") as fh:
         for e in sorted(events, key=lambda x: x["at"]):
@@ -883,6 +941,7 @@ def cmd_status(cwd=None):
     last = max((r.get("at", 0) for r in recs), default=0)
     d = _drifted()
     print("helmet-duck %s -- status" % VERSION)
+    print("  harness                  : %s" % HARNESS)
     print("  risks accepted (armed)   : %s" % ("yes" if _accepted() else "NO, run `duck accept` after reading %s" % RISKS_URL))
     print("  project                  : %s" % (root or "(none found from %s)" % (cwd or os.getcwd())))
     print("  evidence command         : %s" % (cfg["evidence"].get("command") or "(not declared; G2 inactive)"))

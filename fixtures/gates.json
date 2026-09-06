@@ -63,6 +63,18 @@
                 "tool_input": {"command": "printf -- '- [note](note.md)\\n' >> /etc/hosts && tail -1 /etc/hosts | cut -c1-60"}}
     },
     {
+      "name": "Codex apply_patch onto the harness settings (G4 rule)",
+      "source": "constructed",
+      "event": {"tool_name": "apply_patch", "cwd": "{PROJECT}",
+                "tool_input": {"command": "*** Begin Patch\n*** Update File: {HOME}/.claude/settings.json\n@@\n-{}\n+{\"hooks\": {}}\n*** End Patch"}}
+    },
+    {
+      "name": "Codex apply_patch updating an existing file never read this session (G1 rule)",
+      "source": "constructed",
+      "event": {"tool_name": "apply_patch", "cwd": "{PROJECT}",
+                "tool_input": {"command": "*** Begin Patch\n*** Update File: {PROJECT}/.helmet-duck.json\n@@\n-{}\n+{\"evidence\": {}}\n*** End Patch"}}
+    },
+    {
       "name": "commit in a project that declares evidence, with none recorded (verbatim 2026-09-05 chain tail)",
       "source": "verbatim",
       "event": {"tool_name": "Bash", "cwd": "{PROJECT}",
@@ -129,6 +141,12 @@
       "source": "constructed",
       "event": {"tool_name": "Bash", "cwd": "{PROJECT}",
                 "tool_input": {"command": "git push origin main"}}
+    },
+    {
+      "name": "Codex apply_patch adding a new file is creation, not overwriting",
+      "source": "constructed",
+      "event": {"tool_name": "apply_patch", "cwd": "{PROJECT}",
+                "tool_input": {"command": "*** Begin Patch\n*** Add File: {PROJECT}/new_module.py\n+print('hello')\n*** End Patch"}}
     },
     {
       "name": "force-with-lease is the safe variant and is allowed",

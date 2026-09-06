@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write|MultiEdit",
+        "hooks": [
+          {"type": "command", "command": "HELMET_DUCK_HARNESS=codex python3 \"$PLUGIN_ROOT/duck.py\" pre", "timeout": 10},
+          {"type": "command", "command": "HELMET_DUCK_HARNESS=codex python3 \"$PLUGIN_ROOT/duck.py\" dissent", "timeout": 10}
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|apply_patch|Edit|Write|MultiEdit",
+        "hooks": [
+          {"type": "command", "command": "HELMET_DUCK_HARNESS=codex python3 \"$PLUGIN_ROOT/duck.py\" post", "timeout": 10}
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {"type": "command", "command": "cat \"$PLUGIN_ROOT/bushido.md\"; HELMET_DUCK_HARNESS=codex python3 \"$PLUGIN_ROOT/duck.py\" pending --limit 5", "timeout": 10}
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {"type": "command", "command": "HELMET_DUCK_HARNESS=codex python3 \"$PLUGIN_ROOT/duck.py\" mirror-sweep --days 7 >/dev/null 2>&1; HELMET_DUCK_HARNESS=codex python3 \"$PLUGIN_ROOT/duck.py\" brief", "timeout": 60}
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {"type": "command", "command": "HELMET_DUCK_HARNESS=codex python3 \"$PLUGIN_ROOT/duck.py\" stop", "timeout": 30, "statusMessage": "helmet duck: may the turn end?"}
+        ]
+      }
+    ]
+  }
+}
