@@ -1,0 +1,32 @@
+name: CI
+
+# AWS-free verification. Runs on every push to main and every pull request.
+# No credentials, no deploy: the duck's selftest, the plugin manifests, the
+# skill frontmatter, the fixtures, and the built site are all checked here, so a
+# regression is caught before anything can be deployed. Deployment lives in a
+# separate, manually dispatched workflow (deploy.yml).
+#
+# Actions are pinned to full commit SHAs; the trailing comment is the version.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Verify the plugin and build the site
+        run: python3 tools/check.py

@@ -81,6 +81,12 @@ project root. Both merge over the defaults. Keys: `gates` (switch each gate),
 `forbidden` (G0 patterns and reasons), `exempt_roots` (paths G1 ignores),
 `evidence`, `stop`, `dissent`.
 
+## Site and pipeline
+
+helmetduck.com is a static page in `site/`, built by `tools/build.py`, gated by
+`tools/check.py`, and deployed by GitHub Actions through OIDC. The runbook is
+[docs/deploy.md](docs/deploy.md).
+
 ## Licence
 
 Copyright (c) 2026 Carlos Garita. All rights reserved. The source is visible so the

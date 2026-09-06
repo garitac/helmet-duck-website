@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="t">
+  <title id="t">Helmet Duck</title>
+  <!-- body -->
+  <ellipse cx="60" cy="86" rx="40" ry="26" fill="#f2c230"/>
+  <!-- tail -->
+  <path d="M22 78 L8 66 L26 70 Z" fill="#f2c230"/>
+  <!-- neck + head -->
+  <circle cx="84" cy="50" r="24" fill="#f2c230"/>
+  <!-- eye -->
+  <circle cx="92" cy="46" r="3.5" fill="#1d1f1b"/>
+  <!-- beak -->
+  <path d="M106 52 L124 58 L106 64 Z" fill="#e36a1c"/>
+  <!-- helmet -->
+  <path d="M58 44 A28 28 0 0 1 112 40 L112 46 L58 50 Z" fill="#2f5d8a"/>
+  <rect x="56" y="46" width="58" height="7" rx="3.5" fill="#22466a"/>
+  <!-- helmet stripe -->
+  <path d="M84 20 L84 44" stroke="#f3efe3" stroke-width="4" stroke-linecap="round"/>
+  <!-- strap -->
+  <path d="M66 52 Q70 70 88 72" stroke="#22466a" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <!-- wing -->
+  <path d="M40 84 Q56 74 74 86 Q58 96 40 84 Z" fill="#e0ad1f"/>
+  <!-- water line -->
+  <path d="M6 108 Q24 100 42 108 T78 108 T114 108" stroke="#2f5d8a" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.6"/>
+</svg>

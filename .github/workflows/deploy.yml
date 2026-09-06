@@ -1,0 +1,114 @@
+name: Deploy (helmetduck.com)
+
+# MANUAL deploy of helmetduck.com. There is no push trigger: this runs only from
+# "Run workflow" (workflow_dispatch) and only from main, so it can never deploy on
+# its own or from an unreviewed branch.
+#
+# Auth is GitHub OIDC; no long-lived keys exist anywhere. The role, bucket and
+# distribution come from the `prod` GitHub Environment's variables, set by
+# tools/apply.sh when the stacks are created.
+#
+# dry_run defaults to TRUE: the first run of this workflow proves the role can be
+# assumed and the sync would do the right thing, without publishing a byte.
+# Boundaries: no --delete (the role has no delete permission either), invalidates
+# only this site's distribution, verifies the live edge serves this exact commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: assume the role and show what would upload, publish nothing"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write          # GitHub OIDC -> AWS role assumption
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: prod
+    env:
+      AWS_REGION: us-east-1
+      SITE_URL: https://helmetduck.com/
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      # The gate runs before any AWS auth. A failing check never deploys.
+      - name: Verify the plugin and build the site (same gate as CI)
+        run: python3 tools/check.py
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          allowed-account-ids: "244206438585"
+          role-session-name: gha-${{ github.run_id }}
+          retry-max-attempts: 3
+          action-timeout-s: 120
+
+      - name: Guardrail, the target must be this site's bucket
+        run: |
+          BUCKET="${{ vars.SITE_BUCKET }}"
+          case "$BUCKET" in
+            helmet-duck-prod-site-*) echo "target bucket: $BUCKET" ;;
+            *) echo "Refusing: SITE_BUCKET '$BUCKET' is not a helmet-duck-prod-site-* bucket"; exit 1 ;;
+          esac
+
+      # Fingerprinted assets first with an immutable cache, HTML last with no-cache,
+      # so a deploy is visible immediately and never references a missing asset.
+      - name: Upload dist/ (assets immutable, HTML no-cache, never --delete)
+        run: |
+          DRY=""; [ "${{ inputs.dry_run }}" = "true" ] && DRY="--dryrun"
+          aws s3 sync dist/ "s3://${{ vars.SITE_BUCKET }}/" $DRY \
+            --exclude "*.html" --exclude "*.txt" --exclude "*.xml" --exclude ".*" --exclude "*/.*" \
+            --cache-control "public, max-age=31536000, immutable" --only-show-errors
+          aws s3 sync dist/ "s3://${{ vars.SITE_BUCKET }}/" $DRY \
+            --exclude "*" --include "*.txt" --include "*.xml" \
+            --cache-control "public, max-age=300" --only-show-errors
+          aws s3 cp dist/ "s3://${{ vars.SITE_BUCKET }}/" $DRY \
+            --recursive --exclude "*" --include "*.html" \
+            --content-type "text/html; charset=utf-8" \
+            --cache-control "no-cache" --only-show-errors
+
+      - name: Invalidate entry paths (targeted, no wait)
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/" "/index.html" "/404.html" "/robots.txt" "/sitemap.xml" \
+            --query 'Invalidation.Id' --output text
+
+      # Every deployed page must serve this exact revision before the run is green.
+      - name: Wait for the live edge to serve this revision
+        if: ${{ inputs.dry_run != true }}
+        run: |
+          REV="$(git rev-parse --short=12 HEAD)"
+          PAGES=(index.html 404.html)
+          DEADLINE=$(( SECONDS + 120 ))
+          for page in "${PAGES[@]}"; do
+            until curl -fsS --connect-timeout 5 --max-time 15 "${SITE_URL}${page}" 2>/dev/null \
+                  | grep -q "name=\"helmet-duck-revision\" content=\"${REV}\""; do
+              if [ "$SECONDS" -ge "$DEADLINE" ]; then
+                echo "::error::${page} did not serve revision ${REV} within 120s"; exit 1
+              fi
+              echo "  ${page}: stale or missing, retrying in 10s"; sleep 10
+            done
+            echo "  ok    ${page}"
+          done
+          echo "helmetduck.com serves revision ${REV}"
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run == true }}
+        run: echo "Dry run complete. The role was assumed and the sync was simulated; nothing was published."

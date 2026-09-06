@@ -1,0 +1,3 @@
+{
+  "evidence": {"command": "python3 tools/check.py", "max_age_minutes": 30}
+}

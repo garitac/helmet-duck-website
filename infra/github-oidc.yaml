@@ -1,0 +1,118 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  GitHub Actions OIDC deploy role for garitac/helmet-duck: assumable only by this
+  repository's `prod` GitHub Environment, allowed only to list and put objects in the
+  site bucket and to invalidate the site distribution. No delete, no IAM, no
+  CloudFormation, no Route 53, no ACM. Creates the account's GitHub OIDC provider only
+  when ExistingOidcProviderArn is empty (an account can hold exactly one).
+
+#   aws cloudformation deploy --template-file infra/github-oidc.yaml \
+#     --stack-name helmet-duck-github-oidc \
+#     --parameter-overrides BucketName=<from frontend stack> DistributionId=<from frontend stack> \
+#       ExistingOidcProviderArn=<arn or empty> \
+#     --capabilities CAPABILITY_NAMED_IAM --region us-east-1 --profile <admin profile>
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Default: garitac
+    AllowedPattern: "^[A-Za-z0-9-]+$"
+  GitHubRepository:
+    Type: String
+    Default: helmet-duck
+    AllowedPattern: "^[A-Za-z0-9_.-]+$"
+  GitHubEnvironment:
+    Type: String
+    Default: prod
+    AllowedPattern: "^[A-Za-z0-9_-]+$"
+  BucketName:
+    Type: String
+    Description: The site bucket from stack helmet-duck-frontend-prod.
+  DistributionId:
+    Type: String
+    AllowedPattern: "^[A-Z0-9]+$"
+    Description: The distribution id from stack helmet-duck-frontend-prod.
+  ExistingOidcProviderArn:
+    Type: String
+    Default: ""
+    Description: ARN of the account's existing token.actions.githubusercontent.com provider, or empty to create it here.
+
+Conditions:
+  CreateProvider: !Equals [!Ref ExistingOidcProviderArn, ""]
+
+Resources:
+
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateProvider
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      # IAM validates GitHub's issuer against a trusted CA; the thumbprint list is
+      # required by the resource but no longer security-critical for this issuer.
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fca
+      Tags:
+        - { Key: Project, Value: helmet-duck }
+        - { Key: ManagedBy, Value: cloudformation }
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "helmet-duck-${GitHubEnvironment}-deploy"
+      Description: GitHub Actions OIDC deploy role for helmet-duck. Content-only, least privilege.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If [CreateProvider, !Ref GitHubOIDCProvider, !Ref ExistingOidcProviderArn]
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                # repository + environment pin the caller exactly, and are immune to the
+                # immutable owner@id/repo@id sub format some accounts emit.
+                token.actions.githubusercontent.com:repository: !Sub "${GitHubOwner}/${GitHubRepository}"
+                token.actions.githubusercontent.com:environment: !Ref GitHubEnvironment
+              StringLike:
+                # AWS requires a scoped sub condition; the real scoping is repository + environment above.
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}*/${GitHubRepository}*:*"
+      Policies:
+        - PolicyName: !Sub "helmet-duck-${GitHubEnvironment}-content-deploy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: InspectBucket
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource: !Sub "arn:aws:s3:::${BucketName}"
+              - Sid: PutObjects
+                Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub "arn:aws:s3:::${BucketName}/*"
+              - Sid: Invalidate
+                Effect: Allow
+                Action:
+                  - cloudfront:CreateInvalidation
+                  - cloudfront:GetInvalidation
+                  - cloudfront:GetDistribution
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${DistributionId}"
+      Tags:
+        - { Key: Project, Value: helmet-duck }
+        - { Key: Environment, Value: !Ref GitHubEnvironment }
+        - { Key: ManagedBy, Value: cloudformation }
+
+Outputs:
+  DeployRoleArn:
+    Description: GitHub environment variable AWS_DEPLOY_ROLE_ARN.
+    Value: !GetAtt DeployRole.Arn
+  OidcProviderArn:
+    Value: !If [CreateProvider, !Ref GitHubOIDCProvider, !Ref ExistingOidcProviderArn]
