@@ -20,8 +20,8 @@ The security posture and the watchers are described in [security.md](security.md
 | Board | `tools/board.sh` | The one-issue alert board both watchers use. |
 | Infra | `infra/frontend.yaml` | Certificate, site bucket, log bucket, OAC, headers policy, edge router, distribution with logging, A/AAAA records, CAA, null MX, SPF, DMARC, and (with an email) SNS topic, request-flood alarm, monthly budget. |
 | Identity | `infra/github-oidc.yaml` | Deploy role trusting only `garitac/helmet-duck` Environment `prod`; sentry role trusting only Environment `sentry`, reading the log bucket only. Creates the account's OIDC provider only if none exists. |
-| Apply | `tools/apply.sh` | Idempotent: both stacks, both GitHub Environments (protected branches only) and their variables, the registrar lock on both domains, the mail records (following the WorkMail organization when it exists), the contract file. |
-| Mail | `tools/mail.sh` | Idempotent: the WorkMail organization `helmetduck` in us-east-1, the domain, its records through the apply, verification, the default domain, the contract pull request. The mailbox user is created by the owner in the console. |
+| Apply | `tools/apply.sh` | Idempotent: the three stacks (mail when a forwarding address exists, site, roles), both GitHub Environments (protected branches only) and their variables, the registrar lock on both domains, the contract file. |
+| Mail | `infra/mail.yaml`, `tools/mail.sh` | Amazon SES in us-east-1: domain identity with DKIM and MAIL FROM, receipt rule storing each message in a private bucket for 90 days, a forwarder function to the owner's mailbox, the owner's mailbox verified for the sandbox. The script runs the apply, requests production access, waits for DKIM, opens the contract pull request. SMTP credentials for replying from Gmail are the owner's. |
 | Contract | `environments/prod.env.yaml` | The one place the deploy targets are written down. |
 | Pins | `.github/dependabot.yml` | Weekly pull requests for the action SHAs. The repository requires SHA pinning. |
 
@@ -76,14 +76,15 @@ Route 53 hosted zone 0.50 USD a month (already paid for the domain). S3, CloudFr
 and the certificate are effectively free at this traffic: CloudFront's always-free
 tier covers 1 TB a month, ACM public certificates cost nothing, S3 stores a few
 hundred kilobytes of site and a few megabytes of logs. Standard logging and the
-budget are free. The request-flood alarm costs about 0.10 USD a month. The WorkMail
-mailbox is 4 USD a month per user. No WAF, no analytics, no Lambda.
+budget are free. The request-flood alarm costs about 0.10 USD a month. Mail through
+SES is 0.10 USD per thousand messages each way, a few cents at most. No WAF, no analytics.
 
 ## Deliberately not done
 
-- No mail server of our own. Mail is Amazon WorkMail (`tools/mail.sh`), 4 USD a
-  month per user; without a WorkMail organization the zone says null MX, SPF
-  fail-all, DMARC reject, and the sentinel accepts exactly those two states.
+- No mail server and no hosted mailbox. AWS stopped selling WorkMail in April 2026;
+  mail is SES receiving forwarded to the owner's own mailbox, and replies go out
+  through SES SMTP from that mailbox. Without the mail stack the zone says null MX,
+  SPF fail-all, DMARC reject; the sentinel accepts exactly those two states.
 - No WAF. The sentry reads the access logs and the alarm watches volume instead;
   a WAF is a separate, reviewed change if the logs ever justify its cost.
 - No DNSSEC. The signing key would cost about 1 USD a month; not yet.
