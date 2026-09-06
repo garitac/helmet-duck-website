@@ -4,7 +4,9 @@ Description: >-
   repository's `prod` GitHub Environment, allowed only to list and put objects in the
   site bucket and to invalidate the site distribution. No delete, no IAM, no
   CloudFormation, no Route 53, no ACM. Creates the account's GitHub OIDC provider only
-  when ExistingOidcProviderArn is empty (an account can hold exactly one).
+  when ExistingOidcProviderArn is empty (an account can hold exactly one). When
+  LogBucketName is given, also a read-only sentry role that can list and read the
+  access-log bucket and nothing else, assumable only by the `sentry` Environment.
 
 #   aws cloudformation deploy --template-file infra/github-oidc.yaml \
 #     --stack-name helmet-duck-github-oidc \
@@ -36,9 +38,18 @@ Parameters:
     Type: String
     Default: ""
     Description: ARN of the account's existing token.actions.githubusercontent.com provider, or empty to create it here.
+  LogBucketName:
+    Type: String
+    Default: ""
+    Description: The access-log bucket from stack helmet-duck-frontend-prod; empty skips the sentry role.
+  GitHubSentryEnvironment:
+    Type: String
+    Default: sentry
+    AllowedPattern: "^[A-Za-z0-9_-]+$"
 
 Conditions:
   CreateProvider: !Equals [!Ref ExistingOidcProviderArn, ""]
+  HasLogBucket: !Not [!Equals [!Ref LogBucketName, ""]]
 
 Resources:
 
@@ -110,9 +121,56 @@ Resources:
         - { Key: Environment, Value: !Ref GitHubEnvironment }
         - { Key: ManagedBy, Value: cloudformation }
 
+  # The sentry reads access logs and nothing else. Its own Environment, its own
+  # role: the deploy role's trust is not widened by a byte.
+  SentryRole:
+    Type: AWS::IAM::Role
+    Condition: HasLogBucket
+    Properties:
+      RoleName: helmet-duck-sentry
+      Description: GitHub Actions OIDC role for the helmet-duck sentry. Lists and reads the access-log bucket only.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If [CreateProvider, !Ref GitHubOIDCProvider, !Ref ExistingOidcProviderArn]
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:repository: !Sub "${GitHubOwner}/${GitHubRepository}"
+                token.actions.githubusercontent.com:environment: !Ref GitHubSentryEnvironment
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}*/${GitHubRepository}*:*"
+      Policies:
+        - PolicyName: helmet-duck-sentry-read-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ListLogs
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:GetBucketLocation
+                Resource: !Sub "arn:aws:s3:::${LogBucketName}"
+              - Sid: ReadLogs
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "arn:aws:s3:::${LogBucketName}/*"
+      Tags:
+        - { Key: Project, Value: helmet-duck }
+        - { Key: Environment, Value: !Ref GitHubSentryEnvironment }
+        - { Key: ManagedBy, Value: cloudformation }
+
 Outputs:
   DeployRoleArn:
     Description: GitHub environment variable AWS_DEPLOY_ROLE_ARN.
     Value: !GetAtt DeployRole.Arn
   OidcProviderArn:
     Value: !If [CreateProvider, !Ref GitHubOIDCProvider, !Ref ExistingOidcProviderArn]
+  SentryRoleArn:
+    Condition: HasLogBucket
+    Description: GitHub environment variable AWS_SENTRY_ROLE_ARN (Environment sentry).
+    Value: !GetAtt SentryRole.Arn

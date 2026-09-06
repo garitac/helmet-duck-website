@@ -1,0 +1,11 @@
+# The only dependencies this repository has are the GitHub Actions its workflows
+# run, pinned to commit SHAs. Dependabot proposes the pin updates; each arrives as
+# a pull request that must pass the same gate as any other change.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci

@@ -4,7 +4,7 @@ Three variants. Each stands alone. Attach `brand/duck-1024.png`.
 
 ## 1. The story
 
-Coding agents cost me about 1.2 million yen this summer and delivered nothing.
+Coding agents cost me a large amount of money this summer and delivered nothing.
 So I built the thing that says no: Helmet Duck, hooks for Claude Code that
 refuse blind overwrites, unevidenced commits and known-bad commands. First week
 on my machine: 242 catches. Free, source visible. https://helmetduck.com
@@ -25,7 +25,7 @@ how a guard for agents should be sold. https://helmetduck.com/risks.html
 ## LinkedIn variant (longer)
 
 After thirty years in IT and a retirement I did not choose, I spent the summer
-running coding agents on my own projects. They cost about 1.2 million yen in
+running coding agents on my own projects. They cost a large amount of money in
 tokens and delivered nothing: they worked from memory, edited files they never
 read, committed without tests, and asserted every wrong thing with confidence.
 

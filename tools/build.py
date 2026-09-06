@@ -11,9 +11,13 @@ Standard library only. What it does, in order:
 
     python3 tools/build.py            # writes dist/
     python3 tools/build.py --out DIR  # elsewhere (the checker uses a temp dir)
+    python3 tools/build.py --site DIR --out DIR   # another tree (the sentinel rebuilds a past revision)
+
+HELMET_DUCK_REVISION, when set, replaces the git revision stamped into the marker.
 """
 import argparse
 import hashlib
+import os
 import pathlib
 import re
 import shutil
@@ -27,6 +31,9 @@ MARKER = '<meta name="helmet-duck-revision" content="%s">'
 
 
 def revision():
+    forced = os.environ.get("HELMET_DUCK_REVISION")
+    if forced:
+        return forced
     try:
         r = subprocess.run(["git", "rev-parse", "--short=12", "HEAD"], cwd=str(ROOT),
                            capture_output=True, text=True, timeout=10)
@@ -35,14 +42,15 @@ def revision():
         return "unversioned"
 
 
-def build(out):
+def build(out, site=None):
+    site = pathlib.Path(site) if site else SITE
     out = pathlib.Path(out)
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
-    files = [p for p in SITE.rglob("*") if p.is_file()]
+    files = [p for p in site.rglob("*") if p.is_file()]
     for p in files:
-        rel = p.relative_to(SITE)
+        rel = p.relative_to(site)
         if any(part.startswith(".") for part in rel.parts):
             raise SystemExit("refusing dotfile in site/: %s" % rel)
     # fingerprint css
@@ -50,13 +58,13 @@ def build(out):
     for p in files:
         if p.suffix == ".css":
             digest = hashlib.sha256(p.read_bytes()).hexdigest()[:10]
-            rel = p.relative_to(SITE)
+            rel = p.relative_to(site)
             new = rel.with_name("%s.%s%s" % (rel.stem, digest, rel.suffix))
             renames[str(rel).replace("\\", "/")] = str(new).replace("\\", "/")
     rev = revision()
     pages = []
     for p in files:
-        rel = str(p.relative_to(SITE)).replace("\\", "/")
+        rel = str(p.relative_to(site)).replace("\\", "/")
         target = out / renames.get(rel, rel)
         target.parent.mkdir(parents=True, exist_ok=True)
         if p.suffix == ".html":
@@ -83,8 +91,9 @@ def build(out):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "dist"))
+    ap.add_argument("--site", default=None, help="source tree (default: site/)")
     a = ap.parse_args()
-    rev, pages, renames = build(a.out)
+    rev, pages, renames = build(a.out, a.site)
     print("built %s: revision %s, %d page(s), %d fingerprinted asset(s)" % (a.out, rev, len(pages), len(renames)))
     return 0
 

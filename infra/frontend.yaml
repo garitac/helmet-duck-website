@@ -3,8 +3,10 @@ Description: >-
   helmetduck.com static site: ACM certificate (DNS-validated in the hosted zone),
   private S3 origin, CloudFront with Origin Access Control, security headers with a
   strict CSP, an edge router (www to apex, directory index, honest 404), and Route 53
-  alias records. Apply in us-east-1 only: CloudFront reads certificates from that
-  region and from nowhere else.
+  alias records, access logs for the sentry, DNS hygiene records (CAA, null MX, SPF,
+  DMARC) and, when an alert email is given, a monthly budget alert and a request-flood
+  alarm. Apply in us-east-1 only: CloudFront reads certificates from that region and
+  from nowhere else.
 
 # One stack, one environment (prod). The bucket is PRIVATE (all public access
 # blocked) and readable only by this distribution through OAC. Deploys never
@@ -29,6 +31,25 @@ Parameters:
     Type: String
     Default: prod
     AllowedValues: [prod]
+  AlertEmail:
+    Type: String
+    Default: ""
+    Description: >-
+      Email for the monthly budget alert and the request-flood alarm. Empty creates
+      neither. Supplied at apply time (HELMET_DUCK_ALERT_EMAIL); never committed.
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    Description: Monthly cost budget for the whole account, in USD; alerts at 80% actual and 100% forecast.
+  HourlyRequestAlarm:
+    Type: Number
+    Default: 100000
+    MinValue: 1000
+    Description: CloudFront requests in one hour that trip the flood alarm. A quiet new site sees a few hundred.
+
+Conditions:
+  HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
 
 Resources:
 
@@ -72,6 +93,42 @@ Resources:
             Status: Enabled
             NoncurrentVersionExpiration:
               NoncurrentDays: 90
+      Tags:
+        - { Key: Project, Value: helmet-duck }
+        - { Key: Environment, Value: !Ref Env }
+        - { Key: ManagedBy, Value: cloudformation }
+
+  # Access logs: the sentry's raw material. CloudFront's standard logging writes
+  # through an ACL grant, so this bucket keeps ACLs enabled (BucketOwnerPreferred)
+  # while every public grant stays blocked. Logs expire after 90 days. Only the
+  # read-only sentry role (infra/github-oidc.yaml) and the account read them.
+  LogBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "helmet-duck-${Env}-logs-${AWS::AccountId}"
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerPreferred
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-logs
+            Status: Enabled
+            ExpirationInDays: 90
+          - Id: abort-incomplete-uploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
       Tags:
         - { Key: Project, Value: helmet-duck }
         - { Key: Environment, Value: !Ref Env }
@@ -152,6 +209,10 @@ Resources:
         HttpVersion: http2and3
         PriceClass: PriceClass_All
         IPV6Enabled: true
+        Logging:
+          Bucket: !GetAtt LogBucket.DomainName
+          Prefix: cloudfront/
+          IncludeCookies: false
         Aliases:
           - !Ref SiteDomain
           - !Sub "www.${SiteDomain}"
@@ -230,6 +291,108 @@ Resources:
       Type: AAAA
       AliasTarget: { DNSName: !GetAtt Distribution.DomainName, HostedZoneId: Z2FDTNDATAQYW2, EvaluateTargetHealth: false }
 
+  # Certificate authority authorization: only Amazon's CAs may issue for this name.
+  ApexCAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref SiteDomain
+      Type: CAA
+      TTL: "3600"
+      ResourceRecords:
+        - '0 issue "amazon.com"'
+        - '0 issue "amazontrust.com"'
+        - '0 issue "awstrust.com"'
+        - '0 issue "amazonaws.com"'
+
+  # This domain sends and receives no mail, and the zone says so, so nobody can
+  # send mail as it: a null MX, an SPF that fails every sender, a DMARC that
+  # rejects. Replace all three when a mailbox provider is chosen.
+  ApexMX:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref SiteDomain
+      Type: MX
+      TTL: "3600"
+      ResourceRecords:
+        - "0 ."
+  ApexTXT:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref SiteDomain
+      Type: TXT
+      TTL: "3600"
+      ResourceRecords:
+        - '"v=spf1 -all"'
+  DmarcTXT:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "_dmarc.${SiteDomain}"
+      Type: TXT
+      TTL: "3600"
+      ResourceRecords:
+        - '"v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s"'
+
+  # Money watch, created only when an alert email is given. The budget is free
+  # (the first two budgets in an account are). The alarm is the one paid line in
+  # this template: about 0.10 USD a month.
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlertEmail
+    Properties:
+      TopicName: !Sub "helmet-duck-${Env}-alerts"
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref AlertEmail
+  RequestFloodAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
+    Properties:
+      AlarmName: !Sub "helmet-duck-${Env}-request-flood"
+      AlarmDescription: More CloudFront requests in one hour than a quiet static site should see. A cost attack or a viral hour; look, then decide.
+      Namespace: AWS/CloudFront
+      MetricName: Requests
+      Dimensions:
+        - { Name: DistributionId, Value: !Ref Distribution }
+        - { Name: Region, Value: Global }
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: !Ref HourlyRequestAlarm
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertTopic
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Condition: HasAlertEmail
+    Properties:
+      Budget:
+        BudgetName: !Sub "helmet-duck-${Env}-monthly"
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref MonthlyBudgetUsd
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - { SubscriptionType: EMAIL, Address: !Ref AlertEmail }
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - { SubscriptionType: EMAIL, Address: !Ref AlertEmail }
+
 Outputs:
   BucketName:
     Description: GitHub environment variable SITE_BUCKET.
@@ -244,3 +407,9 @@ Outputs:
     Value: !Ref Certificate
   SiteUrl:
     Value: !Sub "https://${SiteDomain}/"
+  LogBucketName:
+    Description: Access-log bucket; parameter LogBucketName for infra/github-oidc.yaml and variable LOG_BUCKET of the sentry Environment.
+    Value: !Ref LogBucket
+  AlertTopicArn:
+    Condition: HasAlertEmail
+    Value: !Ref AlertTopic
