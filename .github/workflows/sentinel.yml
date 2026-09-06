@@ -1,0 +1,58 @@
+name: sentinel
+
+# The site's watching half, running where the owner's laptop cannot reach.
+#
+# WHY IT EXISTS: helmetduck.com keeps serving whether or not anyone is looking.
+# This workflow runs tools/sentinel.py every six hours from GitHub's runners, so
+# a defacement, a pipeline compromise, a broken header, a changed delegation or
+# a lapsed registrar lock is found within hours, not when a visitor mentions it.
+#
+# WHY IT NEEDS NO CREDENTIALS: it checks only what any visitor can see. No AWS
+# role, no secret, no new trust relationship. Adding a watcher must not add an
+# attack surface.
+#
+# WHY IT CANNOT ACT: it opens, updates and closes ONE issue. It never deploys,
+# never pushes, never touches production. A cloud watcher with write access to
+# production would be a second way to break things, not a guard.
+#
+# Actions are pinned to full commit SHAs; the trailing comment is the version.
+
+on:
+  schedule:
+    - cron: "23 */6 * * *"    # every six hours, off the hour: shared runners are less contended
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write               # the notification channel; nothing else
+
+concurrency:
+  group: sentinel
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0            # the live revision must be found here and checked against main
+          persist-credentials: false
+
+      - name: Run the live-surface laws
+        id: watch
+        run: |
+          set +e
+          python3 tools/sentinel.py --md > findings.md
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          cat findings.md
+          cat findings.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Red findings fail the run, so the Actions UI and its email go red too.
+      - name: Report to the standing issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE: ${{ steps.watch.outputs.code }}
+        run: |
+          bash tools/board.sh "sentinel: live-surface findings" "$CODE" findings.md sentinel

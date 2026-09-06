@@ -35,7 +35,7 @@ means accepting it.
 
 Standard library only, no network, all state in ~/.helmet-duck. Free at 0.2.
 Source visible for inspection. Built after a summer in which agents cost me
-about 1.2 million yen and delivered nothing; the first week of these hooks
+a large amount of money and delivered nothing; the first week of these hooks
 caught the agent 242 times.
 
 Site https://helmetduck.com, repo https://github.com/garitac/helmet-duck.

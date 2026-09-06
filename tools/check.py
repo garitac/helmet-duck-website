@@ -10,6 +10,8 @@
      <script> tag and no external stylesheet or image may appear (the CSP forbids
      them); the whole dist/ must stay under the weight budget; no dotfile may
      reach dist/; every page must carry the revision marker.
+  5. every tools/*.py must compile, the sentry must pass its selftest, and every
+     workflow must pin its actions to a commit SHA and declare its permissions.
 
 Exit 0 only when everything holds. Findings are printed as a table.
 """
@@ -140,11 +142,38 @@ def check_site(rows):
         rows.append(("revision marker on every page", not unmarked, ", ".join(unmarked)))
 
 
+def check_tools(rows):
+    """The watchers and the build must compile; the sentry proves itself on a
+    synthetic log; every workflow pins its actions to a commit SHA and declares
+    its permissions, as the repository's Actions settings require."""
+    bad = []
+    for p in sorted((ROOT / "tools").glob("*.py")):
+        try:
+            compile(p.read_text(encoding="utf-8"), str(p), "exec")
+        except SyntaxError as exc:
+            bad.append("%s:%s" % (p.name, exc.lineno))
+    rows.append(("tools compile", not bad, ", ".join(bad)))
+    r = subprocess.run([sys.executable, str(ROOT / "tools" / "sentry.py"), "--selftest"], capture_output=True, text=True)
+    ok = r.returncode == 0 and r.stdout.strip().endswith("PASS")
+    rows.append(("sentry selftest", ok, "" if ok else (r.stdout.strip().splitlines() or [r.stderr[-120:]])[-1]))
+    unpinned, unscoped = [], []
+    for wf in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
+        text = wf.read_text(encoding="utf-8")
+        for m in re.finditer(r"^\s*-?\s*uses:\s*(\S+)", text, re.M):
+            if not re.search(r"@[0-9a-f]{40}$", m.group(1)):
+                unpinned.append("%s: %s" % (wf.name, m.group(1)))
+        if not re.search(r"^permissions:", text, re.M):
+            unscoped.append(wf.name)
+    rows.append(("workflow actions pinned to a commit SHA", not unpinned, ", ".join(unpinned)))
+    rows.append(("workflows declare permissions", not unscoped, ", ".join(unscoped)))
+
+
 def main():
     rows = []
     check_selftest(rows)
     check_manifests(rows)
     check_skills(rows)
+    check_tools(rows)
     check_english_only(rows)
     check_site(rows)
     width = max(len(r[0]) for r in rows)

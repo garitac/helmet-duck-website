@@ -1,0 +1,104 @@
+name: sentry
+
+# Reads the site's CloudFront access logs and says who is knocking.
+#
+# WHAT IT NEEDS: the access-log bucket and a READ-ONLY role, both created by
+# tools/apply.sh (infra/frontend.yaml, infra/github-oidc.yaml). The role can list
+# and read the log bucket and nothing else, and only this repository's `sentry`
+# GitHub Environment may assume it. Until the owner has applied that, the
+# workflow prints "not armed" and exits green: an unarmed watcher is not an
+# incident.
+#
+# WHAT IT DOES: every six hours it fetches the last two days of logs and runs
+# tools/sentry.py over the last 24 hours. The full report lands in the run's
+# summary. Only a RED finding (a flood, a 200 outside the build, weak TLS, a
+# 5xx rate) opens or updates the standing issue.
+#
+# WHAT IT CANNOT DO: block, deploy, push, or touch production. It reads logs and
+# writes one issue. Every client-written string in the report is defanged and
+# labelled as data before any human or agent reads it.
+#
+# Actions are pinned to full commit SHAs; the trailing comment is the version.
+
+on:
+  schedule:
+    - cron: "41 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write             # GitHub OIDC -> the read-only AWS role
+  issues: write               # the notification channel
+
+concurrency:
+  group: sentry
+  cancel-in-progress: false
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: sentry
+    env:
+      AWS_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Armed?
+        id: arm
+        env:
+          ROLE: ${{ vars.AWS_SENTRY_ROLE_ARN }}
+          BUCKET: ${{ vars.LOG_BUCKET }}
+        run: |
+          if [ -z "$ROLE" ] || [ -z "$BUCKET" ]; then
+            echo "armed=false" >> "$GITHUB_OUTPUT"
+            echo "sentry not armed: tools/apply.sh has not created the log bucket and the read-only role yet." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "armed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS credentials (OIDC, read-only role)
+        if: steps.arm.outputs.armed == 'true'
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ vars.AWS_SENTRY_ROLE_ARN }}
+          aws-region: us-east-1
+          allowed-account-ids: "244206438585"
+          role-session-name: sentry-${{ github.run_id }}
+          retry-max-attempts: 3
+          action-timeout-s: 120
+
+      - name: Fetch the last two days of access logs
+        if: steps.arm.outputs.armed == 'true'
+        env:
+          BUCKET: ${{ vars.LOG_BUCKET }}
+        run: |
+          case "$BUCKET" in
+            helmet-duck-prod-logs-*) echo "log bucket: $BUCKET" ;;
+            *) echo "Refusing: LOG_BUCKET '$BUCKET' is not a helmet-duck-prod-logs-* bucket"; exit 1 ;;
+          esac
+          TODAY="$(date -u +%F)"; YESTERDAY="$(date -u -d yesterday +%F)"
+          mkdir -p logs
+          aws s3 sync "s3://$BUCKET/cloudfront/" logs/ --exclude "*" \
+            --include "*.${TODAY}-*" --include "*.${YESTERDAY}-*" --only-show-errors
+          echo "$(find logs -type f | wc -l) log file(s)"
+
+      - name: Read the logs
+        if: steps.arm.outputs.armed == 'true'
+        id: read
+        run: |
+          set +e
+          python3 tools/sentry.py logs --hours 24 --md > report.md
+          echo "code=$?" >> "$GITHUB_OUTPUT"
+          cat report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report to the standing issue (red only)
+        if: steps.arm.outputs.armed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CODE: ${{ steps.read.outputs.code }}
+        run: |
+          bash tools/board.sh "sentry: log findings" "$CODE" report.md sentry

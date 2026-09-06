@@ -10,7 +10,7 @@ can.
 
 ## Why it exists
 
-Between June and August 2026 one owner spent about 1.2 million yen on coding
+Between June and August 2026 one owner spent a large amount of money on coding
 agents and got no product back. The agents worked from memory instead of reading
 the tree, appended notes to files they had never opened, committed without running
 the tests, spawned audits of audits, and asserted every wrong thing with full
@@ -116,8 +116,12 @@ project root. Both merge over the defaults. Keys: `gates` (switch each gate),
 ## Site and pipeline
 
 helmetduck.com is a static page in `site/`, built by `tools/build.py`, gated by
-`tools/check.py`, and deployed by GitHub Actions through OIDC. The runbook is
-[docs/deploy.md](docs/deploy.md).
+`tools/check.py`, and deployed by GitHub Actions through OIDC. Two scheduled
+watchers with no write access to anything but one issue each guard the live site:
+the sentinel rebuilds the revision the site declares and compares every file, and
+the sentry reads the access logs and defangs every client-written string before
+anyone reads it. Runbooks: [docs/deploy.md](docs/deploy.md) and
+[docs/security.md](docs/security.md). Report a vulnerability through [SECURITY.md](SECURITY.md).
 
 ## Licence
 

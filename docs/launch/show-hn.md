@@ -9,8 +9,8 @@ Show HN: Helmet Duck – hooks that refuse what a coding agent should not do
 
 ## Body
 
-I spent June to August 2026 running coding agents on my own projects and about
-1.2 million yen (roughly 8,000 USD) on tokens, and got no product out of it. The
+I spent June to August 2026 running coding agents on my own projects and a large
+amount of money on tokens, and got no product out of it. The
 agents worked from memory instead of reading files, appended to files they had
 never opened, committed without running tests, and asserted every wrong thing
 with full confidence.
