@@ -240,12 +240,22 @@ def check_tls(f):
     if not curl:
         f.amber("TLS 1.1 refused", "curl is not available here")
         return
-    r = subprocess.run([curl, "-sS", "--tls-max", "1.1", "--max-time", "20", "-o", os.devnull, BASE],
-                       capture_output=True, text=True)
+    # Ubuntu's OpenSSL refuses to speak TLS 1.1 at its default security level, so on
+    # a runner the probe would fail on the client side and prove nothing. A throwaway
+    # OpenSSL configuration lowers this one process's floor; the edge, not the client,
+    # must then be the side that refuses. Builds on another TLS library ignore it.
+    with tempfile.TemporaryDirectory() as d:
+        cnf = pathlib.Path(d) / "openssl.cnf"
+        cnf.write_text("openssl_conf = openssl_init\n[openssl_init]\nssl_conf = ssl_sect\n[ssl_sect]\n"
+                       "system_default = system_default_sect\n[system_default_sect]\nMinProtocol = TLSv1\n"
+                       "CipherString = DEFAULT:@SECLEVEL=0\n")
+        r = subprocess.run([curl, "-sS", "--tls-max", "1.1", "--max-time", "20", "-o", os.devnull, BASE],
+                           capture_output=True, text=True, env=dict(os.environ, OPENSSL_CONF=str(cnf)))
     err = r.stderr.strip()
+    client_side = "no protocols available" in err or "unsupported protocol" in err.lower()
     if r.returncode == 0:
         f.red("TLS 1.1 refused", "the edge accepted a TLS 1.1 handshake")
-    elif "no protocols available" in err or "unsupported protocol" in err.lower():
+    elif client_side:
         f.amber("TLS 1.1 refused", "this client cannot speak TLS 1.1, so the floor was not tested")
     elif r.returncode == 35:
         f.ok("TLS 1.1 refused", "handshake refused by the edge")
