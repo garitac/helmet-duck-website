@@ -20,7 +20,8 @@ The security posture and the watchers are described in [security.md](security.md
 | Board | `tools/board.sh` | The one-issue alert board both watchers use. |
 | Infra | `infra/frontend.yaml` | Certificate, site bucket, log bucket, OAC, headers policy, edge router, distribution with logging, A/AAAA records, CAA, null MX, SPF, DMARC, and (with an email) SNS topic, request-flood alarm, monthly budget. |
 | Identity | `infra/github-oidc.yaml` | Deploy role trusting only `garitac/helmet-duck` Environment `prod`; sentry role trusting only Environment `sentry`, reading the log bucket only. Creates the account's OIDC provider only if none exists. |
-| Apply | `tools/apply.sh` | Idempotent: both stacks, both GitHub Environments (protected branches only) and their variables, the registrar lock on both domains, the contract file. |
+| Apply | `tools/apply.sh` | Idempotent: both stacks, both GitHub Environments (protected branches only) and their variables, the registrar lock on both domains, the mail records (following the WorkMail organization when it exists), the contract file. |
+| Mail | `tools/mail.sh` | Idempotent: the WorkMail organization `helmetduck` in us-east-1, the domain, its records through the apply, verification, the default domain, the contract pull request. The mailbox user is created by the owner in the console. |
 | Contract | `environments/prod.env.yaml` | The one place the deploy targets are written down. |
 | Pins | `.github/dependabot.yml` | Weekly pull requests for the action SHAs. The repository requires SHA pinning. |
 
@@ -75,14 +76,14 @@ Route 53 hosted zone 0.50 USD a month (already paid for the domain). S3, CloudFr
 and the certificate are effectively free at this traffic: CloudFront's always-free
 tier covers 1 TB a month, ACM public certificates cost nothing, S3 stores a few
 hundred kilobytes of site and a few megabytes of logs. Standard logging and the
-budget are free. The request-flood alarm is the one paid line: about 0.10 USD a
-month. No WAF, no analytics, no Lambda.
+budget are free. The request-flood alarm costs about 0.10 USD a month. The WorkMail
+mailbox is 4 USD a month per user. No WAF, no analytics, no Lambda.
 
 ## Deliberately not done
 
-- No mailbox for the domain. The zone says so: null MX, SPF that fails every
-  sender, DMARC that rejects. Replace those three records in `infra/frontend.yaml`
-  when a provider is chosen.
+- No mail server of our own. Mail is Amazon WorkMail (`tools/mail.sh`), 4 USD a
+  month per user; without a WorkMail organization the zone says null MX, SPF
+  fail-all, DMARC reject, and the sentinel accepts exactly those two states.
 - No WAF. The sentry reads the access logs and the alarm watches volume instead;
   a WAF is a separate, reviewed change if the logs ever justify its cost.
 - No DNSSEC. The signing key would cost about 1 USD a month; not yet.

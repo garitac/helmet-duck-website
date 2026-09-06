@@ -13,7 +13,8 @@
 # access-log bucket, DNS hygiene records and alerts) and the GitHub OIDC roles
 # (deploy, and the read-only sentry). It creates the `prod` and `sentry` GitHub
 # Environments with their variables, sets the registrar transfer lock on both
-# domains, and fills the contract file. Nothing is deleted, nothing is published:
+# domains, points the mail records at WorkMail when tools/mail.sh has created the
+# organization, and fills the contract file. Nothing is deleted, nothing is published:
 # publishing is the deploy workflow, and its dry_run defaults to true.
 set -euo pipefail
 
@@ -38,8 +39,46 @@ ZONE="$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN." --profile "$
 echo "zone $ZONE"
 
 echo "== stack $FRONTEND_STACK ($REGION): certificate, bucket, distribution, DNS"
+# Parameters not named here keep their stored values, so an apply without the
+# alert address leaves the alerts as they are instead of deleting them.
+FRONTEND_PARAMS=("SiteDomain=$DOMAIN" "HostedZoneId=$ZONE")
+[ -n "${HELMET_DUCK_ALERT_EMAIL:-}" ] && FRONTEND_PARAMS+=("AlertEmail=$HELMET_DUCK_ALERT_EMAIL")
+
+echo "== mail: is there an Amazon WorkMail organization for $DOMAIN?"
+# The zone's mail records follow WorkMail when the organization exists (tools/mail.sh
+# creates it) and say "no mail" otherwise. If the organization exists but its records
+# cannot be read, the apply stops rather than silently pointing the zone at nothing.
+MAIL_PROVIDER=none; DKIM_JSON="[]"; WEBMAIL=""
+WM_ORG="$(aws workmail list-organizations --region us-east-1 --profile "$PROFILE" \
+          --query "OrganizationSummaries[?Alias=='helmetduck' && State=='Active'].OrganizationId | [0]" --output text 2>/dev/null || true)"
+if [ -n "$WM_ORG" ] && [ "$WM_ORG" != "None" ]; then
+  RECORDS="$(aws workmail get-mail-domain --organization-id "$WM_ORG" --domain-name "$DOMAIN" --region us-east-1 --profile "$PROFILE" --output json)" \
+    || { echo "refusing: WorkMail organization $WM_ORG exists but the records for $DOMAIN could not be read"; exit 1; }
+  IFS=$'\t' read -r WM_MX WM_AUTO WM_VERIFY WM_D1 WM_D2 WM_D3 <<< "$(python3 - "$RECORDS" <<'PY'
+import json, sys
+recs = json.loads(sys.argv[1])["Records"]
+mx = next(r["Value"] for r in recs if r["Type"] == "MX")
+if not mx[:1].isdigit():
+    mx = "10 " + mx
+auto = next(r["Value"] for r in recs if r["Type"] == "CNAME" and r["Hostname"].lower().startswith("autodiscover."))
+verify = next(r["Value"] for r in recs if r["Type"] == "TXT" and r["Hostname"].lower().startswith("_amazonses.")).strip('"')
+dkim = sorted(r["Hostname"].split("._domainkey.")[0] for r in recs if r["Type"] == "CNAME" and "._domainkey." in r["Hostname"])
+assert len(dkim) == 3, "expected three DKIM selectors, got %r" % dkim
+print("\t".join([mx, auto, verify] + dkim))   # tab-separated: the MX value contains a space
+PY
+)"
+  MAIL_PROVIDER=workmail
+  DKIM_JSON="[\"$WM_D1\", \"$WM_D2\", \"$WM_D3\"]"
+  WEBMAIL="https://helmetduck.awsapps.com/mail"
+  FRONTEND_PARAMS+=("MailProvider=workmail" "WorkMailMx=$WM_MX" "WorkMailAutodiscover=$WM_AUTO" "WorkMailVerificationToken=$WM_VERIFY"
+                    "WorkMailDkimToken1=$WM_D1" "WorkMailDkimToken2=$WM_D2" "WorkMailDkimToken3=$WM_D3")
+  echo "WorkMail $WM_ORG: the zone will carry its MX, SPF, verification, DKIM and autodiscover records"
+else
+  FRONTEND_PARAMS+=("MailProvider=none")
+  echo "none: the zone keeps its null MX, SPF fail-all and DMARC reject"
+fi
 aws cloudformation deploy --template-file infra/frontend.yaml --stack-name "$FRONTEND_STACK" \
-  --parameter-overrides "SiteDomain=$DOMAIN" "HostedZoneId=$ZONE" "AlertEmail=${HELMET_DUCK_ALERT_EMAIL:-}" \
+  --parameter-overrides "${FRONTEND_PARAMS[@]}" \
   --region "$REGION" --profile "$PROFILE" --no-fail-on-empty-changeset
 out() { aws cloudformation describe-stacks --stack-name "$1" --region "$REGION" --profile "$PROFILE" \
         --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue | [0]" --output text; }
@@ -91,14 +130,17 @@ for d in helmetduck.com helmet-duck.com; do
 done
 
 echo "== environment contract"
-python3 - "$BUCKET" "$DIST" "$CFDOMAIN" "$ROLE" "$ZONE" "$LOGS" "$SENTRY" "${HELMET_DUCK_ALERT_EMAIL:+configured}" <<'PY'
-import pathlib, sys
-b, d, c, r, z, logs, sentry, alerts = sys.argv[1:9]
+ALERTS_STATE="$(aws cloudformation describe-stacks --stack-name "$FRONTEND_STACK" --region "$REGION" --profile "$PROFILE" \
+                --query "Stacks[0].Parameters[?ParameterKey=='AlertEmail'].ParameterValue | [0]" --output text)"
+{ [ -n "$ALERTS_STATE" ] && [ "$ALERTS_STATE" != "None" ]; } && ALERTS_STATE=configured || ALERTS_STATE="not configured"
+python3 - "$BUCKET" "$DIST" "$CFDOMAIN" "$ROLE" "$ZONE" "$LOGS" "$SENTRY" "$ALERTS_STATE" "$MAIL_PROVIDER" "$DKIM_JSON" "$WEBMAIL" <<'PY'
+import pathlib, re, sys
+b, d, c, r, z, logs, sentry, alerts, mail, dkim, webmail = sys.argv[1:12]
 p = pathlib.Path("environments/prod.env.yaml")
 t = p.read_text()
+t = re.sub(r'(?m)^(\s*dkim_selectors:).*$', r'\1 %s' % dkim, t)
 for k, v in (("bucket", b), ("cloudfront_distribution", d), ("cloudfront_domain", c), ("role_arn", r), ("route53_hosted_zone_id", z),
-             ("log_bucket", logs), ("sentry_role_arn", sentry), ("alerts", alerts or "not configured")):
-    import re
+             ("log_bucket", logs), ("sentry_role_arn", sentry), ("alerts", alerts), ("provider", mail), ("webmail", webmail)):
     t = re.sub(r'(?m)^(\s*%s:).*$' % k, r'\1 "%s"' % v, t)
 t = t.replace("status: PLANNED", "status: CREATED")
 p.write_text(t)

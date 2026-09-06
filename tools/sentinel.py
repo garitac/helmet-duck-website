@@ -6,7 +6,7 @@ needs no credentials: everything it checks is visible to any visitor. It rebuild
 the revision the live site declares and compares every published file byte for
 byte, then checks the redirects, the security headers, the honest 404, that the
 bucket is private, the TLS floor, the certificate, the DNS delegation and the
-hygiene records, and the registrar lock.
+hygiene records (in either mail state: none, or Amazon WorkMail), and the registrar lock.
 
 It never acts. It reports, and the exit code is the verdict:
   0  every law held; amber findings are printed, not fatal
@@ -52,7 +52,6 @@ EXPECT = {
     "csp": "default-src 'none'; style-src 'self'; img-src 'self' data:; font-src 'self'; "
            "base-uri 'none'; form-action 'none'; frame-ancestors 'none'; upgrade-insecure-requests",
     "caa_issuers": {"amazon.com", "amazontrust.com", "awstrust.com", "amazonaws.com"},
-    "spf": "v=spf1 -all",
     "dmarc_policy": "p=reject",
     # Until tools/apply.sh has created the hygiene records and set the registrar
     # lock, their absence is amber. Flip both to True after the apply: then absence
@@ -64,7 +63,15 @@ EXPECT = {
     "expiry_amber_days": 60,
     "expiry_red_days": 30,
 }
-RRTYPE = {"NS": 2, "MX": 15, "TXT": 16, "CAA": 257}
+# The zone is in exactly one of these mail states, told apart by its MX. The SPF must
+# match the state; in the workmail state the autodiscover CNAME and the DKIM selectors
+# recorded in environments/prod.env.yaml must point at Amazon as well.
+MAIL = {
+    "none": {"mx": {"0 ."}, "spf": "v=spf1 -all", "label": "null MX: no mail is received here"},
+    "workmail": {"mx": {"10 inbound-smtp.us-east-1.amazonaws.com."}, "spf": "v=spf1 include:amazonses.com -all",
+                 "autodiscover": "autodiscover.mail.us-east-1.awsapps.com", "label": "Amazon WorkMail"},
+}
+RRTYPE = {"NS": 2, "CNAME": 5, "MX": 15, "TXT": 16, "CAA": 257}
 TAMPER = re.compile(r"<script\b|<iframe\b|<form\b|<object\b|<embed\b|\son[a-z]+\s*=|javascript:", re.I)
 
 
@@ -109,6 +116,16 @@ def doh(name, rtype):
         except Exception as e:                           # noqa: BLE001  a resolver failing is data here
             errs.append("%s: %s" % (url.split("/")[2], e))
     raise RuntimeError("; ".join(errs))
+
+
+def contract_dkim_selectors():
+    """The DKIM selectors tools/apply.sh recorded in the contract, or an empty list."""
+    try:
+        text = (ROOT / "environments" / "prod.env.yaml").read_text(encoding="utf-8")
+        m = re.search(r"^\s*dkim_selectors:\s*(\[.*\])", text, re.M)
+        return json.loads(m.group(1)) if m else []
+    except (OSError, ValueError):
+        return []
 
 
 def unquote_txt(s):
@@ -290,12 +307,20 @@ def check_dns(f):
         else:
             f.verdict("CAA record", issuers == EXPECT["caa_issuers"], "issue " + ", ".join(sorted(issuers)))
 
+        mx = {a.strip() for a in doh(SITE, "MX")}
+        state = next((k for k, v in MAIL.items() if mx == v["mx"]), None)
+        if state is None:
+            f.add("MX", absent if not mx else "red", "unexpected: %s" % (", ".join(sorted(mx)) or "no record"))
+            state = "none"
+        else:
+            f.ok("MX", MAIL[state]["label"])
+
         txt = [unquote_txt(a) for a in doh(SITE, "TXT")]
         spf = [t for t in txt if t.lower().startswith("v=spf1")]
         if not spf:
             f.add("SPF record", absent, "none: any server may send mail as this domain")
         else:
-            f.verdict("SPF record", spf[0].strip() == EXPECT["spf"], spf[0])
+            f.verdict("SPF record", spf[0].strip() == MAIL[state]["spf"], spf[0])
 
         dm = [unquote_txt(a) for a in doh("_dmarc." + SITE, "TXT")]
         dm = [t for t in dm if t.lower().startswith("v=dmarc1")]
@@ -304,11 +329,18 @@ def check_dns(f):
         else:
             f.verdict("DMARC record", EXPECT["dmarc_policy"] in dm[0].replace(" ", "").lower(), dm[0])
 
-        mx = [a.strip() for a in doh(SITE, "MX")]
-        if not mx or mx == ["0 ."]:
-            f.ok("MX", "no mail is received here" + (" (null MX)" if mx else ""))
-        else:
-            f.amber("MX", "mail is configured: %s. Update the sentinel's expectations if this is yours." % ", ".join(mx))
+        if state == "workmail":
+            auto = {a.rstrip(".").lower() for a in doh("autodiscover." + SITE, "CNAME")}
+            f.verdict("autodiscover", auto == {MAIL["workmail"]["autodiscover"]}, ", ".join(sorted(auto)) or "no record")
+            sels = contract_dkim_selectors()
+            if not sels:
+                f.amber("DKIM", "selectors not yet recorded in environments/prod.env.yaml")
+            else:
+                bad = [sel for sel in sels
+                       if {a.rstrip(".").lower() for a in doh("%s._domainkey.%s" % (sel, SITE), "CNAME")}
+                       != {"%s.dkim.amazonses.com" % sel}]
+                f.verdict("DKIM", not bad, "%d selector(s) point at amazonses" % len(sels) if not bad
+                          else "missing or wrong: " + ", ".join(bad))
     except RuntimeError as e:
         f.amber("DNS not checked", "resolvers unreachable: %s" % str(e)[:160])
 

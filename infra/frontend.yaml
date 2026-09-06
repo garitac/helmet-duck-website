@@ -3,8 +3,8 @@ Description: >-
   helmetduck.com static site: ACM certificate (DNS-validated in the hosted zone),
   private S3 origin, CloudFront with Origin Access Control, security headers with a
   strict CSP, an edge router (www to apex, directory index, honest 404), and Route 53
-  alias records, access logs for the sentry, DNS hygiene records (CAA, null MX, SPF,
-  DMARC) and, when an alert email is given, a monthly budget alert and a request-flood
+  alias records, access logs for the sentry, DNS hygiene records (CAA, MX, SPF, DMARC;
+  WorkMail's records when a mailbox exists) and, when an alert email is given, a monthly budget alert and a request-flood
   alarm. Apply in us-east-1 only: CloudFront reads certificates from that region and
   from nowhere else.
 
@@ -48,8 +48,36 @@ Parameters:
     MinValue: 1000
     Description: CloudFront requests in one hour that trip the flood alarm. A quiet new site sees a few hundred.
 
+  MailProvider:
+    Type: String
+    Default: none
+    AllowedValues: [none, workmail]
+    Description: >-
+      none: the zone says the domain sends and receives no mail (null MX, SPF fail-all).
+      workmail: MX, SPF, verification, DKIM and autodiscover records for the Amazon WorkMail
+      organization. tools/apply.sh detects the organization and fills the values below.
+  WorkMailMx:
+    Type: String
+    Default: "10 inbound-smtp.us-east-1.amazonaws.com."
+  WorkMailAutodiscover:
+    Type: String
+    Default: "autodiscover.mail.us-east-1.awsapps.com."
+  WorkMailVerificationToken:
+    Type: String
+    Default: ""
+  WorkMailDkimToken1:
+    Type: String
+    Default: ""
+  WorkMailDkimToken2:
+    Type: String
+    Default: ""
+  WorkMailDkimToken3:
+    Type: String
+    Default: ""
+
 Conditions:
   HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
+  HasWorkMail: !Equals [!Ref MailProvider, workmail]
 
 Resources:
 
@@ -305,9 +333,12 @@ Resources:
         - '0 issue "awstrust.com"'
         - '0 issue "amazonaws.com"'
 
-  # This domain sends and receives no mail, and the zone says so, so nobody can
-  # send mail as it: a null MX, an SPF that fails every sender, a DMARC that
-  # rejects. Replace all three when a mailbox provider is chosen.
+  # Mail. With MailProvider=none the zone says the domain sends and receives no
+  # mail, so nobody can send mail as it: a null MX, an SPF that fails every sender,
+  # a DMARC that rejects. With MailProvider=workmail the MX and SPF point at Amazon
+  # WorkMail (which sends through amazonses.com), and the verification, DKIM and
+  # autodiscover records below are created. DMARC stays at reject in both cases:
+  # WorkMail signs with DKIM aligned to this domain, which is what DMARC needs.
   ApexMX:
     Type: AWS::Route53::RecordSet
     Properties:
@@ -316,7 +347,7 @@ Resources:
       Type: MX
       TTL: "3600"
       ResourceRecords:
-        - "0 ."
+        - !If [HasWorkMail, !Ref WorkMailMx, "0 ."]
   ApexTXT:
     Type: AWS::Route53::RecordSet
     Properties:
@@ -325,7 +356,57 @@ Resources:
       Type: TXT
       TTL: "3600"
       ResourceRecords:
-        - '"v=spf1 -all"'
+        - !If [HasWorkMail, '"v=spf1 include:amazonses.com -all"', '"v=spf1 -all"']
+  MailVerification:
+    Type: AWS::Route53::RecordSet
+    Condition: HasWorkMail
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "_amazonses.${SiteDomain}"
+      Type: TXT
+      TTL: "3600"
+      ResourceRecords:
+        - !Sub '"${WorkMailVerificationToken}"'
+  MailAutodiscover:
+    Type: AWS::Route53::RecordSet
+    Condition: HasWorkMail
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "autodiscover.${SiteDomain}"
+      Type: CNAME
+      TTL: "3600"
+      ResourceRecords:
+        - !Ref WorkMailAutodiscover
+  MailDkim1:
+    Type: AWS::Route53::RecordSet
+    Condition: HasWorkMail
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "${WorkMailDkimToken1}._domainkey.${SiteDomain}"
+      Type: CNAME
+      TTL: "3600"
+      ResourceRecords:
+        - !Sub "${WorkMailDkimToken1}.dkim.amazonses.com"
+  MailDkim2:
+    Type: AWS::Route53::RecordSet
+    Condition: HasWorkMail
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "${WorkMailDkimToken2}._domainkey.${SiteDomain}"
+      Type: CNAME
+      TTL: "3600"
+      ResourceRecords:
+        - !Sub "${WorkMailDkimToken2}.dkim.amazonses.com"
+  MailDkim3:
+    Type: AWS::Route53::RecordSet
+    Condition: HasWorkMail
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "${WorkMailDkimToken3}._domainkey.${SiteDomain}"
+      Type: CNAME
+      TTL: "3600"
+      ResourceRecords:
+        - !Sub "${WorkMailDkimToken3}.dkim.amazonses.com"
   DmarcTXT:
     Type: AWS::Route53::RecordSet
     Properties:
