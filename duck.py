@@ -52,7 +52,14 @@ WHAT IT DOES NOT DO, STATED RATHER THAN PRETENDED
     duck status | selftest | evidence | seal | override
     duck claim CLASS "text" | repay ID "why" | default ID "why" | void ID "why"
     duck pending | rates | report | mirror-sweep | mirror-report | brief
+    duck licence activate KEY | licence status | licence deactivate
     duck pre | post | stop | dissent          (hook entry points; event on stdin)
+
+THE LICENCE (the only network call the duck ever makes, and only when asked)
+  `duck licence activate KEY` sends the key and a label for this machine to the
+  licence vendor's public License API once, records the answer under the state
+  directory, and shows the tier in `duck status`. Version 0.1 gates nothing
+  behind it: the record is the beginning of the paid tier, not a lock.
 """
 import argparse
 import hashlib
@@ -103,7 +110,9 @@ DEFAULTS = {
     "evidence": {"command": None, "max_age_minutes": 30},
     "stop": {"require_clean_worktree": False, "require_no_open_claims": True},
     "dissent": {"floor": 0.5, "min_closures": 3},
+    "licence": {"vendor": "lemonsqueezy", "api": "https://api.lemonsqueezy.com/v1/licenses"},
 }
+LICENCE_FILE = STATE / "licence.json"
 
 PROTECTED_ALWAYS = [str(ROOT), str(STATE), str(OVERRIDE), str(HOME / ".claude" / "settings.json"),
                     str(HOME / ".claude" / "hooks"), str(HOME / ".codex" / "hooks.json"),
@@ -722,6 +731,100 @@ def cmd_override():
     return 0
 
 
+# ------------------------------------------------------------------ licence
+def _licence_call(cfg, action, fields):
+    """One POST to the vendor's License API (form-encoded, JSON back). Lemon Squeezy's
+    endpoints are /activate (license_key, instance_name), /validate and /deactivate
+    (license_key, instance_id); the answer carries activated/valid/deactivated, an
+    error string or null, license_key, instance and meta (product, variant, customer)."""
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    url = "%s/%s" % (cfg["licence"]["api"].rstrip("/"), action)
+    req = urllib.request.Request(url, data=urllib.parse.urlencode(fields).encode(),
+                                 headers={"Accept": "application/json",
+                                          "User-Agent": "helmet-duck/%s" % VERSION}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as exc:
+        try:
+            return json.loads(exc.read().decode("utf-8") or "{}")
+        except ValueError:
+            return {"error": "HTTP %s from the licence vendor" % exc.code}
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        return {"error": "could not reach the licence vendor: %s" % exc}
+
+
+def _licence_record():
+    if not LICENCE_FILE.exists():
+        return None
+    try:
+        return json.loads(LICENCE_FILE.read_text())
+    except ValueError:
+        return None
+
+
+def cmd_licence(action, key=None):
+    cfg, _ = _config(None)
+    if cfg["licence"].get("vendor") != "lemonsqueezy":
+        print("unknown licence vendor %r; only lemonsqueezy is implemented" % cfg["licence"].get("vendor"))
+        return 1
+    rec = _licence_record()
+    if action == "status":
+        if not rec:
+            print("tier: free (no licence activated)")
+            return 0
+        print("tier: %s" % rec.get("tier", "personal"))
+        print("product: %s / %s" % (rec.get("product"), rec.get("variant")))
+        print("instance: %s (%s)" % (rec.get("instance_id"), rec.get("instance_name")))
+        print("activated: %s" % rec.get("activated_at"))
+        print("key: %s" % (rec.get("key", "")[:8] + "..." if rec.get("key") else "?"))
+        return 0
+    if action == "activate":
+        if not key:
+            print("usage: duck licence activate KEY")
+            return 1
+        instance_name = "%s@%s" % (os.environ.get("USER", "user"), os.uname().nodename) if hasattr(os, "uname") else "helmet-duck"
+        ans = _licence_call(cfg, "activate", {"license_key": key, "instance_name": instance_name})
+        if not ans.get("activated"):
+            print("activation refused: %s" % (ans.get("error") or "no reason given"))
+            _log({"event": "licence", "decision": "refused", "reason": str(ans.get("error"))[:120]})
+            return 1
+        meta = ans.get("meta") or {}
+        lk = ans.get("license_key") or {}
+        rec = {"vendor": "lemonsqueezy", "tier": "personal", "key": key,
+               "instance_id": (ans.get("instance") or {}).get("id"), "instance_name": instance_name,
+               "product": meta.get("product_name"), "variant": meta.get("variant_name"),
+               "customer_email": meta.get("customer_email"), "status": lk.get("status"),
+               "activation_usage": lk.get("activation_usage"), "activation_limit": lk.get("activation_limit"),
+               "activated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        STATE.mkdir(parents=True, exist_ok=True)
+        LICENCE_FILE.write_text(json.dumps(rec, indent=1))
+        try:
+            os.chmod(LICENCE_FILE, 0o600)
+        except OSError:
+            pass
+        _log({"event": "licence", "decision": "activated", "instance": rec["instance_id"]})
+        print("activated: %s / %s for %s (%s of %s activations used)" % (
+            rec["product"], rec["variant"], instance_name, rec["activation_usage"], rec["activation_limit"]))
+        return 0
+    if action == "deactivate":
+        if not rec:
+            print("nothing to deactivate")
+            return 1
+        ans = _licence_call(cfg, "deactivate", {"license_key": rec["key"], "instance_id": rec.get("instance_id") or ""})
+        if not ans.get("deactivated"):
+            print("deactivation refused: %s" % (ans.get("error") or "no reason given"))
+            return 1
+        LICENCE_FILE.unlink()
+        _log({"event": "licence", "decision": "deactivated"})
+        print("deactivated; this machine is back on the free tier")
+        return 0
+    print("usage: duck licence activate KEY | status | deactivate")
+    return 1
+
+
 def cmd_status(cwd=None):
     cfg, root = _config(cwd)
     recs = [json.loads(l) for l in LOG.read_text().splitlines() if l.strip()] if LOG.exists() else []
@@ -741,6 +844,8 @@ def cmd_status(cwd=None):
     for (e, dec), n in sorted(by.items()):
         print("  last 24h  %-9s %-9s: %d" % (e, dec, n))
     print("  open dissent claims      : %d" % len(_open_claims()))
+    rec = _licence_record()
+    print("  tier                     : %s" % ("free" if not rec else "%s (%s)" % (rec.get("tier", "personal"), rec.get("instance_name"))))
     caps = [r for r in day if r.get("decision") == "cap"]
     if caps:
         print("  FLAG: %d stop-cap event(s) in 24h: a block was ignored after %d tries; read the log" % (len(caps), MAX_BLOCKS_IN_ROW))
@@ -915,7 +1020,13 @@ def main(argv=None):
         p.add_argument("evidence")
     pd = sub.add_parser("pending")
     pd.add_argument("--limit", type=int, default=5)
+    lc = sub.add_parser("licence")
+    lc.add_argument("action", choices=("activate", "status", "deactivate"))
+    lc.add_argument("key", nargs="?")
     args = ap.parse_args(argv)
+
+    if args.cmd == "licence":
+        return cmd_licence(args.action, args.key)
 
     if args.cmd in ("pre", "post", "stop", "dissent"):
         try:

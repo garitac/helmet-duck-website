@@ -72,7 +72,15 @@ duck claim CLASS "text"          open a prose claim
 duck repay|default|void ID "why" close one
 duck pending | rates | report    the ledger
 duck mirror-sweep | mirror-report | brief
+duck licence activate KEY        register a Personal licence (one call to the vendor, nothing gated in 0.1)
+duck licence status | deactivate
 ```
+
+## Money
+
+Sponsorship through GitHub Sponsors, Personal licences through a merchant of
+record, Team engagements invoiced in yen. No payment code lives here; see
+[docs/commerce.md](docs/commerce.md).
 
 ## Configuration
 
