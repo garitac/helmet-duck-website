@@ -451,8 +451,9 @@ Resources:
     Type: AWS::Budgets::Budget
     Condition: HasAlertEmail
     Properties:
+      # No fixed BudgetName: changing a subscriber replaces the budget, and a replacement
+      # with a fixed name collides with the one it replaces. CloudFormation names it.
       Budget:
-        BudgetName: !Sub "helmet-duck-${Env}-monthly"
         BudgetType: COST
         TimeUnit: MONTHLY
         BudgetLimit:
