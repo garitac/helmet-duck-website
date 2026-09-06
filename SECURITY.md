@@ -36,7 +36,8 @@ such as GitHub, AWS or the merchant of record.
 
 Releases come only from https://github.com/garitac/helmet-duck. The `main` branch
 is protected: no force-push, no deletion, every change through a pull request that
-passes the gate, merged with a signed commit; every action pinned to a commit SHA.
+passes the gate, merged as a squash commit that GitHub signs; every action pinned to
+a commit SHA.
 On the user's machine the installed duck is sealed, and a modified copy fails closed.
 
 ## Watchers

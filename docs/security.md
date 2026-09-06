@@ -20,7 +20,7 @@ from `main`.
 | Origin | Private bucket, all public access blocked, readable only by the distribution through Origin Access Control; versioned, 90 days of history; deploys cannot delete | verified: a direct request answers 403 |
 | Edge | TLS 1.2 floor (TLS 1.1 refused), HTTP redirected to HTTPS, www to apex, HSTS with preload, strict CSP, frame denial, nosniff, referrer and permissions policies, honest 404 | verified from outside |
 | Pipeline | Deploy only by manual dispatch from `main`; OIDC role with PutObject and invalidation only; the role trusts only this repository's `prod` Environment, and that Environment accepts only protected branches | verified |
-| Repository | `main` protected: no force-push, no deletion, linear history, the CI check required, admins included, signed merges; SHA pinning required for actions; wiki off; secret scanning with push protection; private vulnerability reporting; Dependabot for the action pins | set 2026-09-07 |
+| Repository | `main` protected: no force-push, no deletion, linear history, the CI check required, admins included; every merge is a squash commit signed by GitHub; SHA pinning required for actions; wiki off; secret scanning with push protection; private vulnerability reporting; Dependabot for the action pins | set 2026-09-07 |
 | Domain | Route 53 delegation pinned in the sentinel; CAA restricting issuance to Amazon's CAs; null MX, SPF fail-all, DMARC reject; registrar transfer lock on helmetduck.com and helmet-duck.com | in the template and the apply script; live after the owner's next apply |
 | Money | Monthly budget alert at 80% actual and 100% forecast; CloudFront request-flood alarm, one hour, email | after the apply, when an alert email is given |
 | Watchers | Sentinel every six hours with no credentials; sentry every six hours through a read-only role | sentinel live from the merge; sentry armed by the apply |
@@ -77,9 +77,11 @@ issue is opened only when a finding is red.
   volume instead.
 - A CloudTrail trail and GuardDuty: storage and per-event fees. CloudTrail's free
   90-day event history is on by default.
-- The fourth lock on the repository, signed commits from the owner's own key: the
-  merge commits are signed by GitHub, which is what the branch rule requires; a
-  personal key can be added later without changing the rule.
+- A rule requiring signed commits. It was tried and removed the same day: GitHub
+  refuses to merge a pull request whose branch commits are unsigned, even though
+  the squash commit it creates is signed, and the agent that opens the pull
+  requests has no signing key. The squash merges are GitHub-signed anyway; the
+  required check and admin enforcement are what stop an unreviewed change.
 
 ## Verify it yourself
 
