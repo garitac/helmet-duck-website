@@ -44,9 +44,10 @@ jobs:
         with:
           persist-credentials: false
 
-      # The gate runs before any AWS auth. A failing check never deploys.
-      - name: Verify the plugin and build the site (same gate as CI)
-        run: python3 tools/check.py
+      # The gate runs before any AWS auth. A failing check never deploys. The gate
+      # builds into a temporary directory to verify; the real dist/ is built after it.
+      - name: Verify the plugin (same gate as CI), then build dist/
+        run: python3 tools/check.py && python3 tools/build.py
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
