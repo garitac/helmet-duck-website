@@ -53,7 +53,7 @@
           <tr><td><strong>G4</strong> self-protection</td><td>before a tool runs</td><td>Writes to the duck, its state, the harness settings and the override are refused. A duck whose hash differs from its sealed manifest fails closed.</td></tr>
           <tr><td><strong>Dissent chair</strong></td><td>before a tool runs</td><td>Recognises four defect classes agents repeat and asks the one question a real check would have asked. Advisory. It never denies.</td></tr>
           <tr><td><strong>Mirror</strong></td><td>session start</td><td>Opens every session with how many times the machinery caught the agent in the last seven days, read from the harness's own transcripts.</td></tr>
-          <tr><td><strong>Bushido</strong></td><td>each prompt</td><td>Seven virtues and three verification checks, in the agent's context every turn.</td></tr>
+          <tr><td><strong>Agent Code</strong></td><td>each prompt</td><td>Seven duties and three verification checks, in English, in the agent's context every turn. Courage to deliver never overrides the owner's word on an irreversible act.</td></tr>
         </tbody>
       </table>
       </div>
@@ -61,10 +61,12 @@
 
     <section>
       <h2>Install</h2>
-      <p>Claude Code, two commands, then seal the installed copy so an edited duck fails closed. Python 3.9 or later, standard library only. Nothing leaves your machine.</p>
+      <p>Read the <a href="/risks.html">risks and mitigations</a> first; installing means you accept them. Then Claude Code, two commands. Python 3.9 or later, standard library only. Nothing leaves your machine except a licence activation you start yourself.</p>
 <pre><code>/plugin marketplace add garitac/helmet-duck
 /plugin install helmet-duck@helmet-duck</code></pre>
-<pre><code>duck seal</code></pre>
+      <p>The duck refuses nothing until you record your acceptance, which arms the gates. Then seal the installed copy so an edited duck fails closed.</p>
+<pre><code>duck accept
+duck seal</code></pre>
       <p>To arm the commit gate in a project, declare its check command in <code>.helmet-duck.json</code> at the project root:</p>
 <pre><code>{"evidence": {"command": "python3 -m pytest -q"}}</code></pre>
       <p>Codex support follows in the next version; the same script already speaks Codex's hook protocol.</p>
@@ -111,7 +113,7 @@
   </main>
 
   <footer>
-    <p>© 2026 Carlos Garita. All rights reserved. Source visible for inspection; see <a href="/terms.html">licence and terms</a> and <a href="/privacy.html">privacy</a>.</p>
+    <p>© 2026 Carlos Garita. All rights reserved. Source visible for inspection; see <a href="/risks.html">risks and mitigations</a>, <a href="/terms.html">licence and terms</a> and <a href="/privacy.html">privacy</a>.</p>
     <p>This page sets no cookies, runs no scripts and loads nothing from anyone else.</p>
     <p><a href="https://github.com/garitac/helmet-duck">github.com/garitac/helmet-duck</a></p>
   </footer>

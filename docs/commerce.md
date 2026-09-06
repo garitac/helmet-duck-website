@@ -7,7 +7,7 @@ The site links out; the counterparties collect the money and the data.
 | --- | --- | --- | --- | --- | --- |
 | GitHub Sponsors | Contributions | GitHub pays you; a gift, not a sale | 0% on personal sponsorships | Income to you; no VAT | Listing not yet enabled |
 | Lemon Squeezy | Personal tier licence keys | Lemon Squeezy, as merchant of record | About 5% + 50¢, ~7.5% effective for a non-US seller | They register and remit foreign VAT and sales tax | Store not yet created |
-| Stripe Invoicing | Team tier, Japanese companies | You, in yen | Stripe's card or bank-transfer fee | Domestic 消費税 as normal business | Stripe account exists and worked in sandbox; live verification to confirm |
+| Stripe Invoicing | Team tier, Japanese companies | You, in yen | Stripe's card or bank-transfer fee | Domestic consumption tax as for any business invoice | Stripe account exists and worked in sandbox; live verification to confirm |
 
 ## 1. GitHub Sponsors (owner, about 15 minutes)
 
@@ -27,8 +27,8 @@ The site links out; the counterparties collect the money and the data.
    choosing in USD (they convert). Enable **License keys** on the variant with
    an activation limit (3 machines is a fair default) and no expiry.
 3. Copy the variant's checkout URL into `site/index.html`, Personal tier button.
-   Replace "Price to be announced" with the price. Publish the 特定商取引法 page
-   first (`docs/legal/tokushoho.template.md`).
+   Replace "Price to be announced" with the price. Publish the commercial
+   transactions disclosure first (`docs/legal/commercial-transactions-disclosure.template.md`).
 4. Buyers run `duck licence activate <KEY>`. The duck calls Lemon Squeezy's
    License API once, records the instance locally, and shows the tier in
    `duck status`. Nothing in version 0.1 is gated behind it; the record is the
@@ -53,7 +53,8 @@ one precondition; you confirmed the account worked in sandbox.
 | --- | --- |
 | `site/privacy.html` | Written; publishes with the next deploy |
 | `site/terms.html` | Written; publishes with the next deploy |
-| 特定商取引法に基づく表記 | Template only, in `docs/legal/`; needs your address decision and a contact channel; publish before the first sale |
+| Commercial transactions disclosure (Act on Specified Commercial Transactions) | Template only, in `docs/legal/`; needs your address decision and a contact channel; publish before the first sale |
+| `site/risks.html` and `RISKS.md` | Written; acceptance is recorded by `duck accept` and arms the gates |
 
 ## 5. What was deliberately not done
 

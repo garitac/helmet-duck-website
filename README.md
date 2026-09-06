@@ -29,7 +29,7 @@ agent 242 times in its first week. This is that harness, generalised.
 | **Owner override** | terminal | `duck override` opens every gate for 30 minutes, logged. The agent cannot do this (G4). |
 | **Dissent chair** | before a tool runs | A deterministic classifier recognises four defect classes agents repeat and prints the one question a real check would have asked, with that class's measured default rate. Advisory. It never denies. |
 | **Mirror** | session start | Sweeps the harness's own transcripts for the moments the machine caught the agent and opens the session with the count. The agent's inside view is not consulted, because its inside view is the problem. |
-| **Bushido** | each prompt | Seven virtues and three verification checks, in the agent's context every turn. |
+| **Agent Code** | each prompt | Seven duties and three verification checks, in English, in the agent's context every turn. Courage to deliver never overrides the owner's word on an irreversible act. |
 
 ## What it does not do
 
@@ -39,6 +39,16 @@ Stated rather than pretended:
 - It does not see writes whose path is assembled at runtime inside another program.
 - The mirror's recall is partial. A wrong claim spoken fluently leaves no error signature.
 
+## Risks first
+
+Read [RISKS.md](RISKS.md), also published at https://helmetduck.com/risks.html.
+Installing or using Helmet Duck means you accept every risk on it. The duck refuses
+nothing until you record that acceptance with `duck accept`, which also arms the gates.
+
+English is the only language of this repository: code, comments, copy and the Agent
+Code. The gate refuses any non-Latin script, so nobody can claim an instruction was
+unclear because it was not in English.
+
 ## Install (Claude Code)
 
 ```
@@ -46,11 +56,16 @@ Stated rather than pretended:
 /plugin install helmet-duck@helmet-duck
 ```
 
-Then, from a terminal, seal the installed copy so an edited duck fails closed:
+Then, from a terminal, record your acceptance and seal the installed copy so an
+edited duck fails closed:
 
 ```
+duck accept
 duck seal
 ```
+
+Uninstall with `/plugin uninstall helmet-duck@helmet-duck`; deleting `~/.helmet-duck`
+removes every record it kept.
 
 To arm G2 in a project, add `.helmet-duck.json` at its root:
 
@@ -63,6 +78,7 @@ Requirements: Python 3.9 or later, standard library only. No network. Nothing le
 ## Commands
 
 ```
+duck accept                      record acceptance of RISKS.md; arms the gates
 duck status                      what is armed, what is fresh, what is open
 duck selftest                    every gate proven on recorded fixtures, under 150 ms
 duck evidence                    run the project's check and record it (opens G2)

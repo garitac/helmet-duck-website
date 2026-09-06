@@ -129,6 +129,12 @@
       "source": "constructed",
       "event": {"tool_name": "Bash", "cwd": "{PROJECT}",
                 "tool_input": {"command": "git push origin main"}}
+    },
+    {
+      "name": "force-with-lease is the safe variant and is allowed",
+      "source": "constructed",
+      "event": {"tool_name": "Bash", "cwd": "{PROJECT}",
+                "tool_input": {"command": "git push --force-with-lease origin feature"}}
     }
   ]
 }

@@ -53,7 +53,14 @@ WHAT IT DOES NOT DO, STATED RATHER THAN PRETENDED
     duck claim CLASS "text" | repay ID "why" | default ID "why" | void ID "why"
     duck pending | rates | report | mirror-sweep | mirror-report | brief
     duck licence activate KEY | licence status | licence deactivate
+    duck accept                              (record acceptance of RISKS.md; arms the gates)
     duck pre | post | stop | dissent          (hook entry points; event on stdin)
+
+ACCEPTANCE OF RISK
+  Until the user runs `duck accept`, the duck is installed but unarmed: every
+  hook returns allow, nothing is refused, and each session and prompt carries a
+  one-line notice saying so. Acceptance records the version, the time and the
+  hash of the RISKS.md the user accepted, under the state directory.
 
 THE LICENCE (the only network call the duck ever makes, and only when asked)
   `duck licence activate KEY` sends the key and a label for this machine to the
@@ -74,7 +81,7 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 HOME = pathlib.Path.home()
 ROOT = pathlib.Path(__file__).resolve().parent
 STATE = pathlib.Path(os.environ.get("HELMET_DUCK_STATE", str(HOME / ".helmet-duck")))
@@ -101,9 +108,9 @@ DEFAULTS = {
         {"id": "ssh-heredoc", "pattern": r"\bssh\s+\S+[^\n]*<<",
          "reason": "heredoc through ssh: the local shell mangles it. Write the file "
                    "locally, scp it, run it."},
-        {"id": "force-push", "pattern": r"\bgit\s+push\b[^\n]*(--force\b|\s-f\b|\s\+\S)",
-         "reason": "a force-push rewrites history others may hold. If it is wanted, "
-                   "the owner does it from a terminal."},
+        {"id": "force-push", "pattern": r"\bgit\s+push\b[^\n]*(--force(?!-with-lease)\b|\s-f\b|\s\+\S)",
+         "reason": "a force-push rewrites history others may hold (--force-with-lease is allowed). "
+                   "If it is wanted, the owner does it from a terminal."},
         {"id": "rm-rf-root", "pattern": r"\brm\s+-[a-zA-Z]*r[a-zA-Z]*\s+(/|~|\$HOME|\.|\*)(\s|$)",
          "reason": "rm -r on a root, the home or the working directory. Never from an agent."},
     ],
@@ -113,6 +120,11 @@ DEFAULTS = {
     "licence": {"vendor": "lemonsqueezy", "api": "https://api.lemonsqueezy.com/v1/licenses"},
 }
 LICENCE_FILE = STATE / "licence.json"
+ACCEPTED_FILE = STATE / "accepted.json"
+RISKS_FILE = ROOT / "RISKS.md"
+RISKS_URL = "https://helmetduck.com/risks.html"
+UNARMED_NOTICE = ("HELMET DUCK is installed but not armed: it refuses nothing until the risks at %s "
+                  "are accepted with `duck accept`." % RISKS_URL)
 
 PROTECTED_ALWAYS = [str(ROOT), str(STATE), str(OVERRIDE), str(HOME / ".claude" / "settings.json"),
                     str(HOME / ".claude" / "hooks"), str(HOME / ".codex" / "hooks.json"),
@@ -188,6 +200,14 @@ def _override_open():
     try:
         return time.time() - OVERRIDE.stat().st_mtime < OVERRIDE_SECONDS
     except FileNotFoundError:
+        return False
+
+
+def _accepted():
+    """True only when the user has recorded acceptance of the risks with `duck accept`."""
+    try:
+        return json.loads(ACCEPTED_FILE.read_text()).get("accepted") is True
+    except (OSError, ValueError):
         return False
 
 
@@ -351,6 +371,9 @@ def _evidence_fresh(root, cfg):
 
 def cmd_pre(ev):
     sid = ev.get("session_id")
+    if not _accepted():
+        _log({"event": "pre", "session": sid, "tool": ev.get("tool_name"), "decision": "unarmed"})
+        return 0
     if _override_open():
         _log({"event": "pre", "session": sid, "tool": ev.get("tool_name"), "decision": "override"})
         return 0
@@ -380,9 +403,15 @@ def cmd_post(ev):
     st = _state(sid)
     reads = set(st.get("reads", []))
     before = len(reads)
-    if tool == "Read":
+    if tool in ("Read", "Write", "Edit", "MultiEdit"):
+        # a file the agent just read, wrote or edited through the harness is a
+        # file it knows; a later shell append to it is not a blind edit
         p = _norm(str(ti.get("file_path", "")), cwd)
         if p:
+            reads.add(p)
+    elif tool == "Grep":
+        p = _norm(str(ti.get("path", "")), cwd)
+        if p and os.path.isfile(p):
             reads.add(p)
     elif tool == "Bash":
         cmd = str(ti.get("command", ""))
@@ -420,6 +449,8 @@ def _problems(cfg, root):
 
 def cmd_stop(ev):
     sid = ev.get("session_id")
+    if not _accepted():
+        return 0
     if _override_open():
         _log({"event": "stop", "session": sid, "decision": "override"})
         return 0
@@ -574,6 +605,8 @@ def dissent_cards(event, cfg):
 
 
 def cmd_dissent(ev):
+    if not _accepted():
+        return 0
     cfg, _ = _config(ev.get("cwd"))
     try:
         cards = dissent_cards(ev, cfg)
@@ -675,6 +708,8 @@ def mirror_report():
 
 
 def mirror_brief():
+    if not _accepted():
+        print(UNARMED_NOTICE)
     events = [e for e in _mirror_events() if not e["in_test"]]
     week = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     recent = [e for e in events if e["at"] >= week]
@@ -720,6 +755,20 @@ def cmd_seal():
                                     "fixtures_sha256": fixtures, "version": VERSION,
                                     "sealed_at": int(time.time())}, indent=1) + "\n")
     print("sealed %s (%s)" % (MANIFEST, _sha(pathlib.Path(__file__).resolve())[:16]))
+    return 0
+
+
+def cmd_accept():
+    """Record that the user has read RISKS.md and accepts it; this arms the gates."""
+    STATE.mkdir(parents=True, exist_ok=True)
+    record = {"accepted": True, "version": VERSION, "risks_url": RISKS_URL,
+              "risks_sha256": _sha(RISKS_FILE) if RISKS_FILE.exists() else None,
+              "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+              "user": os.environ.get("USER", "")}
+    ACCEPTED_FILE.write_text(json.dumps(record, indent=1))
+    _log({"event": "accept", "decision": "accepted", "version": VERSION})
+    print("accepted: Helmet Duck %s is armed for this user. Risks: %s" % (VERSION, RISKS_URL))
+    print("Withdraw at any time by uninstalling the plugin or deleting %s" % ACCEPTED_FILE)
     return 0
 
 
@@ -834,6 +883,7 @@ def cmd_status(cwd=None):
     last = max((r.get("at", 0) for r in recs), default=0)
     d = _drifted()
     print("helmet-duck %s -- status" % VERSION)
+    print("  risks accepted (armed)   : %s" % ("yes" if _accepted() else "NO, run `duck accept` after reading %s" % RISKS_URL))
     print("  project                  : %s" % (root or "(none found from %s)" % (cwd or os.getcwd())))
     print("  evidence command         : %s" % (cfg["evidence"].get("command") or "(not declared; G2 inactive)"))
     if root and cfg["evidence"].get("command"):
@@ -894,6 +944,12 @@ def cmd_selftest():
         env = dict(os.environ, HELMET_DUCK_STATE=d, HELMET_DUCK_OVERRIDE=os.path.join(d, "no-override"),
                    HELMET_DUCK_HARNESS="claude")
         sid = "selftest"
+        # unarmed until accepted: before acceptance the canary must pass, after it must be denied
+        canary_ev = {"session_id": sid, "tool_name": "Bash", "cwd": proj, "tool_input": {"command": "echo " + CANARY}}
+        d_unarmed, _, _, _ = _run_hook("pre", canary_ev, env)
+        pathlib.Path(d, "accepted.json").write_text(json.dumps({"accepted": True, "version": VERSION}))
+        d_armed, _, _, _ = _run_hook("pre", canary_ev, env)
+        acceptance_arms = (d_unarmed, d_armed) == ("allow", "deny")
         bad_exit, malformed, slow, missed, false_pos = [], [], [], [], []
         for f in gates_fx["deny"]:
             ev = _expand(f["event"], subs)
@@ -982,8 +1038,9 @@ def cmd_selftest():
 
     ok = (not missed and not false_pos and not bad_exit and not malformed and not slow
           and read_ledger_flips and evidence_flips and override_works and can_fail and drift_closes
-          and not d_missed and not d_false and never_denies and d_ms < BUDGET_MS)
+          and not d_missed and not d_false and never_denies and d_ms < BUDGET_MS and acceptance_arms)
     print("helmet-duck %s -- selftest" % VERSION)
+    print("  unarmed until accepted     : %s (%s -> %s)" % (acceptance_arms, d_unarmed, d_armed))
     print("  deny fixtures denied       : %d of %d%s" % (len(gates_fx["deny"]) - len(missed), len(gates_fx["deny"]), "" if not missed else "  MISSED " + str(missed)))
     print("  allow fixtures allowed     : %d of %d%s" % (len(gates_fx["allow"]) - len(false_pos), len(gates_fx["allow"]), "" if not false_pos else "  FALSE " + str(false_pos)))
     print("  hook exit code always 0    : %s%s" % (not bad_exit, "" if not bad_exit else "  " + str(bad_exit)))
@@ -1006,7 +1063,7 @@ def cmd_selftest():
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="duck", description="Helmet Duck: gates, dissent chair and mirror for coding agents.")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for k in ("pre", "post", "stop", "dissent", "selftest", "seal", "override", "status", "evidence",
+    for k in ("pre", "post", "stop", "dissent", "selftest", "seal", "override", "accept", "status", "evidence",
               "rates", "report", "brief", "mirror-report"):
         sub.add_parser(k)
     sw = sub.add_parser("mirror-sweep")
@@ -1039,7 +1096,8 @@ def main(argv=None):
             raise
         except Exception as exc:            # a crashed gate must not become a silent allow
             if args.cmd == "pre":
-                _deny("G4", "the gate crashed (%s: %s); failing closed" % (type(exc).__name__, exc))
+                _deny("G4", "the gate crashed (%s: %s); failing closed. Run `duck override` from a terminal "
+                            "to open every gate for 30 minutes, or uninstall the plugin." % (type(exc).__name__, exc))
             _log({"event": args.cmd, "decision": "crash", "error": repr(exc)[:200]})
             return 0
     if args.cmd == "selftest":
@@ -1048,6 +1106,8 @@ def main(argv=None):
         return cmd_seal()
     if args.cmd == "override":
         return cmd_override()
+    if args.cmd == "accept":
+        return cmd_accept()
     if args.cmd == "status":
         return cmd_status()
     if args.cmd == "evidence":
@@ -1073,6 +1133,8 @@ def main(argv=None):
                 c, v["repaid"], v["defaulted"], ("%.2f" % v["rate"]) if v["rate"] is not None else "-"))
         return 0
     if args.cmd == "pending":
+        if not _accepted():
+            print(UNARMED_NOTICE)
         for r in _open_claims()[-args.limit:]:
             print("  %s  %-28s %s" % (r["id"], r.get("class"), (r.get("text") or r.get("excerpt", ""))[:70]))
         return 0

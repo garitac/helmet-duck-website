@@ -54,6 +54,34 @@ def check_manifests(rows):
         rows.append(("hooks reference existing files", False, str(exc)[:80]))
 
 
+# Cyrillic, Hebrew and Arabic, Indic, Thai, Japanese kana, CJK ideographs, Hangul and
+# full-width forms, built from code points so this file stays ASCII and passes its own check.
+NON_LATIN_RANGES = ((0x0400, 0x04FF), (0x0590, 0x06FF), (0x0900, 0x0DFF), (0x0E00, 0x0E7F),
+                    (0x3040, 0x30FF), (0x3400, 0x4DBF), (0x4E00, 0x9FFF), (0xAC00, 0xD7AF),
+                    (0xFF00, 0xFFEF))
+NON_LATIN = re.compile("[" + "".join("%s-%s" % (chr(a), chr(b)) for a, b in NON_LATIN_RANGES) + "]")
+TEXT_SUFFIXES = {".py", ".md", ".html", ".json", ".yml", ".yaml", ".css", ".txt", ".sh", ".svg"}
+
+
+def check_english_only(rows):
+    """English is the only language of code, comments and copy: no letters from
+    non-Latin scripts anywhere a user or an agent reads."""
+    hits = []
+    for p in ROOT.rglob("*"):
+        if not p.is_file() or p.suffix not in TEXT_SUFFIXES:
+            continue
+        rel = p.relative_to(ROOT)
+        if rel.parts[0] in (".git", "dist", "node_modules", "__pycache__"):
+            continue
+        try:
+            for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
+                if NON_LATIN.search(line):
+                    hits.append("%s:%d" % (rel, n))
+        except (OSError, UnicodeDecodeError):
+            continue
+    rows.append(("english only (no non-Latin scripts)", not hits, ", ".join(hits[:6]) + (" ..." if len(hits) > 6 else "")))
+
+
 def check_skills(rows):
     for skill in sorted((ROOT / "skills").glob("*/SKILL.md")):
         text = skill.read_text(encoding="utf-8")
@@ -111,6 +139,7 @@ def main():
     check_selftest(rows)
     check_manifests(rows)
     check_skills(rows)
+    check_english_only(rows)
     check_site(rows)
     width = max(len(r[0]) for r in rows)
     for name, ok, note in rows:
