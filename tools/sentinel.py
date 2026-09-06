@@ -57,8 +57,8 @@ EXPECT = {
     # Until tools/apply.sh has created the hygiene records and set the registrar
     # lock, their absence is amber. Flip both to True after the apply: then absence
     # is red, because something that existed has gone.
-    "dns_hygiene_required": False,
-    "transfer_lock_required": False,
+    "dns_hygiene_required": True,
+    "transfer_lock_required": True,
     "cert_amber_days": 30,
     "cert_red_days": 14,
     "expiry_amber_days": 60,
