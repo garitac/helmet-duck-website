@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Install — Helmet Duck</title>
+  <meta name="description" content="Install Helmet Duck in Claude Code or Codex, record your acceptance of the risks, seal the installed copy, and prove the deny channel with the canary.">
+  <link rel="canonical" href="https://helmetduck.com/install.html">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="helmet-duck-revision" content="unversioned">
+</head>
+<body>
+  <nav class="menu" aria-label="Site">
+    <a href="/">Home</a>
+    <a href="/gates.html">What it does</a>
+    <a href="/install.html" aria-current="page">Install</a>
+    <a href="/tiers.html">Tiers and support</a>
+    <a href="/risks.html">Risks</a>
+    <a href="/terms.html">Terms</a>
+    <a href="/privacy.html">Privacy</a>
+  </nav>
+  <header>
+    <img src="/assets/duck.svg" alt="" width="72" height="72">
+    <div>
+      <h1>Install</h1>
+      <p>Two commands in the harness, three lines in a terminal, one canary to prove it.</p>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Install (Claude Code)</h2>
+      <p>Read the <a href="/risks.html">risks and mitigations</a> first; installing means you accept them. Then two commands. Python 3.9 or later, standard library only. Nothing leaves your machine except a licence activation you start yourself.</p>
+<pre><code>/plugin marketplace add garitac/helmet-duck
+/plugin install helmet-duck@helmet-duck</code></pre>
+      <p>The duck refuses nothing until you record your acceptance, which arms the gates; then seal the installed copy so an edited duck fails closed. Both are typed by you in a terminal, never by the agent, which is refused them. The plugin installs under <code>~/.claude/plugins/cache/helmet-duck/helmet-duck/&lt;version&gt;/</code>; these lines find it, accept, seal and show the result.</p>
+<pre><code>DUCK="$(ls -d ~/.claude/plugins/cache/helmet-duck/helmet-duck/*/duck.py | tail -1)"
+python3 "$DUCK" accept &amp;&amp; python3 "$DUCK" seal
+python3 "$DUCK" status</code></pre>
+      <p>Expected in the status: <code>risks accepted (armed) : yes</code> and <code>sealed : yes</code>. Then prove the deny channel from inside a session: ask the agent to run <code>echo HELMET-DUCK-CANARY-DENY</code>, and the harness answers <code>GATE G0: canary: the deny channel is live</code>.</p>
+      <p>To arm the commit gate in a project, declare its check command in <code>.helmet-duck.json</code> at the project root:</p>
+<pre><code>{"evidence": {"command": "python3 -m pytest -q"}}</code></pre>
+      <h2>Install (Codex)</h2>
+      <p>Codex sends the same hook events and accepts the same answers; only its file-edit tool differs, and the duck reads the paths out of each patch. Clone the repository somewhere permanent, copy <code>codex/hooks.json</code> to <code>~/.codex/hooks.json</code> with <code>$PLUGIN_ROOT</code> replaced by that path, then run <code>/hooks</code> inside Codex and trust each hook. Codex runs no hook you have not reviewed. Then accept and seal as above. The plugin manifest for Codex's marketplace ships in the repository too.</p>
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2026 Carlos Garita. All rights reserved. Source visible for inspection; see <a href="/risks.html">risks and mitigations</a>, <a href="/terms.html">licence and terms</a> and <a href="/privacy.html">privacy</a>.</p>
+    <p>This page sets no cookies, runs no scripts and loads nothing from anyone else.</p>
+    <p><a href="https://github.com/garitac/helmet-duck">github.com/garitac/helmet-duck</a></p>
+  </footer>
+</body>
+</html>
