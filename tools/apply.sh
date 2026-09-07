@@ -2,12 +2,15 @@
 # One-command, idempotent apply of the helmetduck.com pipeline. Run by the OWNER
 # from a terminal after signing in to the account (root or admin):
 #
-#   aws login --profile kanji-shisho
 #   HELMET_DUCK_ALERT_EMAIL=you@example.com tools/apply.sh
 #
+# It signs you in itself when the cached session has expired: through Identity Center
+# when the profile has an sso_session (the recommended profile,
+# kanjishisho-bootstrap-admin, an administrator with MFA whose session lasts hours),
+# otherwise through the browser sign-in as root, which lasts about ten minutes.
+# HELMET_DUCK_ADMIN_PROFILE names the profile; the default is kanji-shisho (root).
 # HELMET_DUCK_ALERT_EMAIL receives the monthly budget alert and the request-flood
-# alarm; leave it unset to create neither. It is a stack parameter, never committed.
-# HELMET_DUCK_ADMIN_PROFILE overrides the profile name.
+# alarm; leave it unset to keep what is stored. It is a stack parameter, never committed.
 #
 # It creates or updates three CloudFormation stacks in us-east-1: the SES mail stack
 # (when a forwarding address exists), the site (with its access-log bucket, DNS hygiene
@@ -19,6 +22,16 @@
 set -euo pipefail
 
 PROFILE="${HELMET_DUCK_ADMIN_PROFILE:-kanji-shisho}"
+# Sign in with the profile's own mechanism: Identity Center (aws sso login) when the
+# profile has an sso_session, otherwise the browser sign-in that also covers root.
+sign_in() {
+  aws sts get-caller-identity --profile "$PROFILE" >/dev/null 2>&1 && return 0
+  if aws configure get sso_session --profile "$PROFILE" >/dev/null 2>&1 || aws configure get sso_start_url --profile "$PROFILE" >/dev/null 2>&1; then
+    aws sso login --profile "$PROFILE"
+  else
+    aws login --profile "$PROFILE"
+  fi
+}
 REGION=us-east-1
 ACCOUNT_EXPECTED=244206438585
 DOMAIN=helmetduck.com
@@ -29,6 +42,7 @@ MAIL_STACK=helmet-duck-mail-prod
 cd "$(dirname "$0")/.."
 
 echo "== identity"
+sign_in
 ACCOUNT="$(aws sts get-caller-identity --profile "$PROFILE" --query Account --output text)"
 [ "$ACCOUNT" = "$ACCOUNT_EXPECTED" ] || { echo "refusing: profile $PROFILE is account $ACCOUNT, expected $ACCOUNT_EXPECTED"; exit 1; }
 aws sts get-caller-identity --profile "$PROFILE" --query Arn --output text

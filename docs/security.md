@@ -67,6 +67,10 @@ issue is opened only when a finding is red.
 - Run `tools/apply.sh` after `aws login`, with `HELMET_DUCK_ALERT_EMAIL` set, and
   confirm the subscription email. This creates the log bucket, the hygiene records,
   the alerts, the sentry role and the registrar lock. Done on 2026-09-07.
+- Use the Identity Center administrator (profile `kanjishisho-bootstrap-admin`, MFA)
+  for the command line instead of root, so a sign-in never leaves root credentials in
+  this Mac's cache. The scripts sign in through it when `HELMET_DUCK_ADMIN_PROFILE`
+  names it.
 - Run `tools/mail.sh` with the forwarding mailbox for SES mail, click the verification
   link SES sends, and create the SMTP credentials in the SES console: they are a secret,
   which no script here handles. Received mail is stored in the account for 90 days.

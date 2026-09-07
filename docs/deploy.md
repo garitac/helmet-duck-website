@@ -29,11 +29,11 @@ The security posture and the watchers are described in [security.md](security.md
 
 ## Apply (owner, from a terminal, any time; it is idempotent)
 
-1. Sign in to account 244206438585. The browser opens; the session is cached for the CLI.
-
-   ```
-   aws login --profile kanji-shisho
-   ```
+1. Choose the identity. The scripts sign you in themselves when the session has
+   expired. With `HELMET_DUCK_ADMIN_PROFILE=kanjishisho-bootstrap-admin` in your shell
+   they use Identity Center: an administrator user with MFA, and a session that lasts
+   hours. Without it they use the root browser sign-in, whose session lasts about ten
+   minutes and leaves root credentials in the command-line cache meanwhile.
 
 2. Apply, with the address that should receive the budget alert and the flood alarm.
    Certificate validation was the slow step the first time; a re-apply that adds
