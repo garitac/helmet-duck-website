@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What it does — Helmet Duck</title>
+  <meta name="description" content="The gates, the dissent chair, the mirror and the Agent Code: what Helmet Duck refuses, advises and records, and what it does not see.">
+  <link rel="canonical" href="https://helmetduck.com/gates.html">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="helmet-duck-revision" content="unversioned">
+</head>
+<body>
+  <nav class="menu" aria-label="Site">
+    <a href="/">Home</a>
+    <a href="/gates.html" aria-current="page">What it does</a>
+    <a href="/install.html">Install</a>
+    <a href="/tiers.html">Tiers and support</a>
+    <a href="/risks.html">Risks</a>
+    <a href="/terms.html">Terms</a>
+    <a href="/privacy.html">Privacy</a>
+  </nav>
+  <header>
+    <img src="/assets/duck.svg" alt="" width="72" height="72">
+    <div>
+      <h1>What it does</h1>
+      <p>Five gates that refuse, a chair that asks, a mirror that counts, a code the agent reads every turn.</p>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>The parts</h2>
+      <div class="wrap">
+      <table>
+        <thead><tr><th>Part</th><th>When</th><th>What happens</th></tr></thead>
+        <tbody>
+          <tr><td><strong>G0</strong> known-bad forms</td><td>before a tool runs</td><td><code>--no-verify</code>, a heredoc through ssh, a force-push, <code>rm -rf</code> on a root and a canary literal are refused, with the same words every time.</td></tr>
+          <tr><td><strong>G1</strong> overwrite unread</td><td>before a tool runs</td><td>A shell overwrite of an existing file the agent has not read this session is refused.</td></tr>
+          <tr><td><strong>G2</strong> commit unevidenced</td><td>before a tool runs</td><td>In a project that declares a check command, <code>git commit</code> is refused unless that same command ran and passed within the last 30 minutes on the same tree. <code>git -C dir commit</code> is seen.</td></tr>
+          <tr><td><strong>G3</strong> stop unfinished</td><td>when the turn ends</td><td>The turn cannot end with open claims in the ledger. Capped at two blocks in a row, then allowed and logged, because a gate that can loop is a cost.</td></tr>
+          <tr><td><strong>G4</strong> self-protection</td><td>before a tool runs</td><td>Writes to the duck, its state, the harness settings, the override and the project's own configuration are refused, and so are the owner's commands when an agent tries to run them. A duck whose hash differs from its sealed manifest fails closed.</td></tr>
+          <tr><td><strong>Dissent chair</strong></td><td>before a tool runs</td><td>Recognises four defect classes agents repeat and asks the one question a real check would have asked. Advisory. It never denies.</td></tr>
+          <tr><td><strong>Mirror</strong></td><td>session start</td><td>Opens every session with how many times the machinery caught the agent in the last seven days, read from the harness's own transcripts.</td></tr>
+          <tr><td><strong>Agent Code</strong></td><td>each prompt</td><td>Seven duties and three verification checks, in English, in the agent's context every turn. Courage to deliver never overrides the owner's word on an irreversible act.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>What it does not do</h2>
+      <ul>
+        <li>It does not see a claim made from memory in prose. No event fires when the model thinks. Those claims are opened by hand and closed with what was actually checked.</li>
+        <li>It does not see writes whose path is assembled at runtime inside another program.</li>
+        <li>The mirror's recall is partial. A wrong claim spoken fluently leaves no error signature.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>© 2026 Carlos Garita. All rights reserved. Source visible for inspection; see <a href="/risks.html">risks and mitigations</a>, <a href="/terms.html">licence and terms</a> and <a href="/privacy.html">privacy</a>.</p>
+    <p>This page sets no cookies, runs no scripts and loads nothing from anyone else.</p>
+    <p><a href="https://github.com/garitac/helmet-duck">github.com/garitac/helmet-duck</a></p>
+  </footer>
+</body>
+</html>

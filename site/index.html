@@ -14,7 +14,15 @@
   <meta property="og:image" content="https://helmetduck.com/assets/duck.svg">
   <meta name="helmet-duck-revision" content="unversioned">
 </head>
-<body>
+  <nav class="menu" aria-label="Site">
+    <a href="/" aria-current="page">Home</a>
+    <a href="/gates.html">What it does</a>
+    <a href="/install.html">Install</a>
+    <a href="/tiers.html">Tiers and support</a>
+    <a href="/risks.html">Risks</a>
+    <a href="/terms.html">Terms</a>
+    <a href="/privacy.html">Privacy</a>
+  </nav>
   <header>
     <img src="/assets/duck.svg" alt="A duck wearing a helmet" width="72" height="72">
     <div>
@@ -25,10 +33,10 @@
 
   <main>
     <section class="hero">
-      <p class="lead">Everything an agent is told is advice, and advice is exactly what an agent skips when it decides it already knows. Helmet Duck is not advice. At each hook event a script, never the model, evaluates a rule, and the harness refuses the action or refuses to let the turn end. Thinking cannot be gated. Its consequences can. It covers the mistakes listed below, not every mistake; the <a href="/risks.html">risks page</a> says what it misses.</p>
+      <p class="lead">Everything an agent is told is advice, and advice is exactly what an agent skips when it decides it already knows. Helmet Duck is not advice. At each hook event a script, never the model, evaluates a rule, and the harness refuses the action or refuses to let the turn end. Thinking cannot be gated. Its consequences can. It covers the mistakes listed on the <a href="/gates.html">What it does</a> page, not every mistake; the <a href="/risks.html">risks page</a> says what it misses.</p>
       <div class="buttons">
-        <a class="button primary" href="https://github.com/garitac/helmet-duck">Install from GitHub</a>
-        <a class="button secondary" href="#ledger">Read why it exists</a>
+        <a class="button primary" href="/install.html">Install</a>
+        <a class="button secondary" href="/gates.html">What it does</a>
       </div>
     </section>
 
@@ -37,25 +45,6 @@
       <div class="ledger">
         <p>Between June and August 2026 the author spent a large amount of money on coding agents and got no product back. The agents worked from memory instead of reading the tree, appended notes to files they had never opened, committed without running the tests, spawned audits of audits, and asserted every wrong thing with full confidence.</p>
         <p>The first version of these hooks went onto his machine on 2026-09-05. The mirror, run on 2026-09-07 over the previous fourteen days of the author's own transcripts, found <span class="num">353 moments</span> where the machinery caught the agent: 229 failed assertions, 78 gate refusals, 44 syntax errors, 2 denials. Since the hooks went in, 75 of those, 38 of them gate refusals. A catch is a tool result in the agent's own transcript that records one of these; 141 more raised inside test suites are counted apart, because a gate proving itself is not a catch. The number is a dated count, not a rate. Every catch is in a ledger the agent's tools cannot edit.</p>
-      </div>
-    </section>
-
-    <section>
-      <h2>What it does</h2>
-      <div class="wrap">
-      <table>
-        <thead><tr><th>Part</th><th>When</th><th>What happens</th></tr></thead>
-        <tbody>
-          <tr><td><strong>G0</strong> known-bad forms</td><td>before a tool runs</td><td><code>--no-verify</code>, a heredoc through ssh, a force-push, <code>rm -rf</code> on a root and a canary literal are refused, with the same words every time.</td></tr>
-          <tr><td><strong>G1</strong> overwrite unread</td><td>before a tool runs</td><td>A shell overwrite of an existing file the agent has not read this session is refused.</td></tr>
-          <tr><td><strong>G2</strong> commit unevidenced</td><td>before a tool runs</td><td>In a project that declares a check command, <code>git commit</code> is refused unless that same command ran and passed within the last 30 minutes on the same tree. <code>git -C dir commit</code> is seen.</td></tr>
-          <tr><td><strong>G3</strong> stop unfinished</td><td>when the turn ends</td><td>The turn cannot end with open claims in the ledger. Capped at two blocks in a row, then allowed and logged, because a gate that can loop is a cost.</td></tr>
-          <tr><td><strong>G4</strong> self-protection</td><td>before a tool runs</td><td>Writes to the duck, its state, the harness settings, the override and the project's own configuration are refused, and so are the owner's commands when an agent tries to run them. A duck whose hash differs from its sealed manifest fails closed.</td></tr>
-          <tr><td><strong>Dissent chair</strong></td><td>before a tool runs</td><td>Recognises four defect classes agents repeat and asks the one question a real check would have asked. Advisory. It never denies.</td></tr>
-          <tr><td><strong>Mirror</strong></td><td>session start</td><td>Opens every session with how many times the machinery caught the agent in the last seven days, read from the harness's own transcripts.</td></tr>
-          <tr><td><strong>Agent Code</strong></td><td>each prompt</td><td>Seven duties and three verification checks, in English, in the agent's context every turn. Courage to deliver never overrides the owner's word on an irreversible act.</td></tr>
-        </tbody>
-      </table>
       </div>
     </section>
 
@@ -69,62 +58,6 @@ harness  GATE G1: overwrite of /work/notes.md, which was not read this session.
 agent    cat notes.md
 agent    echo "- verified" &gt;&gt; notes.md
 harness  (allowed: the file was read this session)</code></pre>
-    </section>
-
-    <section>
-      <h2>Install (Claude Code)</h2>
-      <p>Read the <a href="/risks.html">risks and mitigations</a> first; installing means you accept them. Then two commands. Python 3.9 or later, standard library only. Nothing leaves your machine except a licence activation you start yourself.</p>
-<pre><code>/plugin marketplace add garitac/helmet-duck
-/plugin install helmet-duck@helmet-duck</code></pre>
-      <p>The duck refuses nothing until you record your acceptance, which arms the gates; then seal the installed copy so an edited duck fails closed. Both are typed by you in a terminal, never by the agent, which is refused them. The plugin installs under <code>~/.claude/plugins/cache/helmet-duck/helmet-duck/&lt;version&gt;/</code>; these lines find it, accept, seal and show the result.</p>
-<pre><code>DUCK="$(ls -d ~/.claude/plugins/cache/helmet-duck/helmet-duck/*/duck.py | tail -1)"
-python3 "$DUCK" accept &amp;&amp; python3 "$DUCK" seal
-python3 "$DUCK" status</code></pre>
-      <p>Expected in the status: <code>risks accepted (armed) : yes</code> and <code>sealed : yes</code>. Then prove the deny channel from inside a session: ask the agent to run <code>echo HELMET-DUCK-CANARY-DENY</code>, and the harness answers <code>GATE G0: canary: the deny channel is live</code>.</p>
-      <p>To arm the commit gate in a project, declare its check command in <code>.helmet-duck.json</code> at the project root:</p>
-<pre><code>{"evidence": {"command": "python3 -m pytest -q"}}</code></pre>
-      <h2>Install (Codex)</h2>
-      <p>Codex sends the same hook events and accepts the same answers; only its file-edit tool differs, and the duck reads the paths out of each patch. Clone the repository somewhere permanent, copy <code>codex/hooks.json</code> to <code>~/.codex/hooks.json</code> with <code>$PLUGIN_ROOT</code> replaced by that path, then run <code>/hooks</code> inside Codex and trust each hook. Codex runs no hook you have not reviewed. Then accept and seal as above. The plugin manifest for Codex's marketplace ships in the repository too.</p>
-    </section>
-
-    <section>
-      <h2>What it does not do</h2>
-      <ul>
-        <li>It does not see a claim made from memory in prose. No event fires when the model thinks. Those claims are opened by hand and closed with what was actually checked.</li>
-        <li>It does not see writes whose path is assembled at runtime inside another program.</li>
-        <li>The mirror's recall is partial. A wrong claim spoken fluently leaves no error signature.</li>
-      </ul>
-    </section>
-
-    <section>
-      <h2>Tiers</h2>
-      <p>The current version is free and complete while the paid tiers are being built. Inspect the source before you run it; that is the point of a hook.</p>
-      <div class="tiers">
-        <div class="tier">
-          <h3>Free</h3>
-          <p>The mirror, the Agent Code, the ledger view. Reports every catch.</p>
-          <p class="price">Free, forever.</p>
-        </div>
-        <div class="tier">
-          <h3>Personal</h3>
-          <p>The gates that block, evidence runs, sealing, updates as agents find new ways to waste money. Sold through a merchant of record; the key activates with <code>duck licence activate</code>.</p>
-          <p class="price">Price to be announced.</p>
-        </div>
-        <div class="tier">
-          <h3>Team</h3>
-          <p>The same duck for a whole team: one licence for up to ten machines, one invoice. Software only. No installation service, no custom gates, no hours with the author.</p>
-          <p class="price">Price to be announced.</p>
-        </div>
-      </div>
-      <p>There is no consulting tier and there will not be one. Helmet Duck is made by one person in Japan and sold as software; questions go to the public issue tracker, in English, and are answered as time allows. Nothing on this page is a promise of anyone's time.</p>
-    </section>
-
-    <section id="support">
-      <h2>Support the duck</h2>
-      <p>The free tier stays free. If the duck has already saved you an afternoon or a month's token bill, sponsorship through GitHub pays for the next gate.</p>
-      <div class="buttons">
-        <a class="button primary" href="https://github.com/sponsors/garitac">Sponsor on GitHub</a>
-      </div>
     </section>
   </main>
 
