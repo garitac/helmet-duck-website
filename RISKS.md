@@ -7,7 +7,7 @@ Helmet Duck runs as hooks inside your coding agent's harness, with your user
 privileges, on your machine. Read this page before installing it. Installing,
 running, or keeping Helmet Duck installed means you have read this page and
 accept every risk on it. The duck refuses nothing until you have recorded that
-acceptance with `duck accept`. The author, Carlos Garita, accepts none of these
+acceptance with `duck accept`. The author accepts none of these
 risks on your behalf.
 
 ## What it can and cannot do to your system
@@ -52,7 +52,7 @@ risks on your behalf.
 Helmet Duck is provided as is, without warranty of any kind, express or
 implied, including fitness for a particular purpose and non-infringement. By
 installing or using it you accept the risks on this page. To the fullest extent
-permitted by applicable law, Carlos Garita is not liable for any loss, damage,
+permitted by applicable law, the author is not liable for any loss, damage,
 cost or claim arising from Helmet Duck, from its refusals or its failures to
 refuse, or from any action of an agent, whether that action was refused,
 allowed, influenced or missed by Helmet Duck. Where the law does not permit an
@@ -65,6 +65,6 @@ installation made by a person who did not own the system or lacked the
 authority to install software on it. Whoever modifies Helmet Duck, redistributes
 it, or installs it on a system they do not own is solely responsible for the
 consequences and for any claim by that system's owner or by anyone affected,
-and agrees to hold Carlos Garita harmless from such claims. These terms are
+and agrees to hold the author harmless from such claims. These terms are
 governed by the laws of Japan. The full terms are at
 https://helmetduck.com/terms.html.
