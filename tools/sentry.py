@@ -152,7 +152,7 @@ def top(counter, n, fn=defang):
 def analyse(rows, allowed, max_requests, max_gb, hours):
     rep = Report()
     salt = secrets.token_bytes(16)
-    clients, bytes_out, s5 = set(), 0, 0
+    clients, bytes_out, s5, refused = set(), 0, 0, 0
     status, served, probes, other404, uas, refs, edges, protos, hosts, contradictions = (collections.Counter() for _ in range(10))
     for r in rows:
         clients.add(hashlib.sha256(salt + r.get("c-ip", "").encode()).hexdigest())
@@ -166,6 +166,8 @@ def analyse(rows, allowed, max_requests, max_gb, hours):
         in_build = uri in allowed or normalise(uri) in allowed or bool(CSS_FAMILY.match(uri))
         if st.startswith("2"):
             (served if in_build else contradictions)[uri] += 1
+        elif st == "429":
+            refused += 1
         elif st.startswith("4"):
             (probes if PROBE.search(uri) else other404)[uri] += 1
         elif st.startswith("5"):
@@ -191,6 +193,7 @@ def analyse(rows, allowed, max_requests, max_gb, hours):
     rep.add("200 only for paths in the build", "red" if contradictions else "ok",
             "served outside the build: " + top(contradictions, 5) if contradictions else "%d served, all in the build" % sum(served.values()))
     rep.add("probes refused", "ok", "%d probe(s) for software that is not here, all answered 4xx" % sum(probes.values()))
+    rep.add("refused at the edge (429)", "ok", "%d request(s) from addresses on the blocklist" % refused)
     rate = s5 / total if total else 0
     rep.add("5xx", "red" if total >= 100 and rate > 0.01 else "amber" if s5 else "ok", "%d (%.2f%%)" % (s5, 100 * rate))
     weak = {p for p in protos if p in WEAK_TLS}
