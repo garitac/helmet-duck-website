@@ -339,6 +339,15 @@ Resources:
       TTL: "3600"
       ResourceRecords:
         - !If [HasMail, '"v=spf1 include:amazonses.com -all"', '"v=spf1 -all"']
+  DmarcTXT:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "_dmarc.${SiteDomain}"
+      Type: TXT
+      TTL: "3600"
+      ResourceRecords:
+        - '"v=DMARC1; p=reject; sp=reject; adkim=s; aspf=s"'
   # Money watch, created only when an alert email is given. The budget is free
   # (the first two budgets in an account are). The alarm is the one paid line in
   # this template: about 0.10 USD a month.
