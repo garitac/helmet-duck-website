@@ -13,12 +13,22 @@
 set -euo pipefail
 
 PROFILE="${HELMET_DUCK_ADMIN_PROFILE:-kanji-shisho}"
+# Sign in with the profile's own mechanism: Identity Center (aws sso login) when the
+# profile has an sso_session, otherwise the browser sign-in that also covers root.
+sign_in() {
+  aws sts get-caller-identity --profile "$PROFILE" >/dev/null 2>&1 && return 0
+  if aws configure get sso_session --profile "$PROFILE" >/dev/null 2>&1 || aws configure get sso_start_url --profile "$PROFILE" >/dev/null 2>&1; then
+    aws sso login --profile "$PROFILE"
+  else
+    aws login --profile "$PROFILE"
+  fi
+}
 REGION=us-east-1
 PARAM=/helmet-duck/prod/brake
 STACK=helmet-duck-frontend-prod
 cd "$(dirname "$0")/.."
 
-aws sts get-caller-identity --profile "$PROFILE" >/dev/null 2>&1 || aws login --profile "$PROFILE"
+sign_in
 DIST="$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --profile "$PROFILE" \
         --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue | [0]" --output text)"
 state() { aws ssm get-parameter --name "$PARAM" --region "$REGION" --profile "$PROFILE" --query Parameter.Value --output text 2>/dev/null || echo '{}'; }

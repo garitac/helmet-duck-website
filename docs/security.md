@@ -67,9 +67,14 @@ issue is opened only when a finding is red.
 - Run `tools/apply.sh` after `aws login`, with `HELMET_DUCK_ALERT_EMAIL` set, and
   confirm the subscription email. This creates the log bucket, the hygiene records,
   the alerts, the sentry role and the registrar lock. Done on 2026-09-07.
-- Run `tools/mail.sh` with the forwarding mailbox for SES mail, click the verification
-  link SES sends, and create the SMTP credentials in the SES console: they are a secret,
-  which no script here handles. Received mail is stored in the account for 90 days.
+- Use the Identity Center administrator (profile `kanjishisho-bootstrap-admin`, MFA)
+  for the command line instead of root, so a sign-in never leaves root credentials in
+  this Mac's cache. The scripts sign in through it when `HELMET_DUCK_ADMIN_PROFILE`
+  names it.
+- Run `tools/mail.sh` with the forwarding mailbox for SES mail and click the verification
+  link SES sends. For replying as the domain, `tools/smtp.sh create` makes a least-privilege
+  IAM user and shows its SMTP credentials once, on your screen only; they go into Gmail's
+  "Send mail as" by hand. Received mail is stored in the account for 90 days.
 - Keep two-factor authentication on the GitHub account and multi-factor
   authentication on the AWS root user. Neither can be verified from here.
 - Decide on the paid items below.
