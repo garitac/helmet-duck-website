@@ -738,5 +738,5 @@ Outputs:
     Condition: HasAlertEmail
     Value: !Ref Keeper
   EdgeFunctionName:
-    Description: tools/blocklist.sh reads and clears the blocklist inside this function.
-    Value: !Ref EdgeRouter
+    Description: tools/blocklist.sh reads and clears the blocklist inside this function. Ref would give the ARN; the API wants the name.
+    Value: !Sub "helmet-duck-${Env}-edge-router"

@@ -20,7 +20,7 @@ cd "$(dirname "$0")/.."
 aws sts get-caller-identity --profile "$PROFILE" >/dev/null 2>&1 || aws login --profile "$PROFILE"
 out() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --profile "$PROFILE" \
         --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue | [0]" --output text; }
-FN="$(out EdgeFunctionName)"
+FN="$(out EdgeFunctionName)"; FN="${FN##*/}"          # the API wants the name; tolerate an ARN
 LOGS="$(out LogBucketName)"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
@@ -63,6 +63,9 @@ t = time.gmtime()
 rows = ["\t".join([time.strftime("%Y-%m-%d", t), time.strftime("%H:%M:%S", t), "SELF", "0", "192.0.2.1", "GET", "helmetduck.com", "/", "200"])] * 700
 open(sys.argv[1], "wb").write(gzip.compress(("#Version: 1.0\n#Fields: " + " ".join(fields) + "\n" + "\n".join(rows) + "\n").encode()))
 PY
+    for old in $(aws s3 ls "s3://$LOGS/cloudfront/" --profile "$PROFILE" | awk '/selftest\./ {print $4}'); do
+      aws s3 rm "s3://$LOGS/cloudfront/$old" --profile "$PROFILE" --only-show-errors   # a file left by an earlier interrupted test
+    done
     KEY="cloudfront/selftest.$(date -u +%Y%m%d-%H%M%S).gz"
     aws s3 cp "$TMP/selftest.gz" "s3://$LOGS/$KEY" --profile "$PROFILE" --only-show-errors
     echo "uploaded a synthetic log file: 700 requests from 192.0.2.1; waiting for the keeper"
