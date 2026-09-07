@@ -488,7 +488,9 @@ def gate_pre(ev, cfg, root):
             return "G4", ("`duck %s` is the owner's command. An agent never runs it; a person runs it "
                           "from a terminal, where no hook fires. Ask the owner." % m.group(1))
     if gates.get("G4") and _WRITE_VERB.search(cmd):
-        for p in _mentioned_paths(cmd, cwd):
+        # paths named with a slash anywhere in the command, and the resolved targets of
+        # redirects, tee, cp, mv and sed -i, so a bare `> .helmet-duck.json` is seen too
+        for p in _mentioned_paths(cmd, cwd) + _overwrite_targets(cmd, cwd):
             if _under(p, protected):
                 return "G4", ("%s is protected: the duck, its state, the harness settings and "
                               "the override are written only by the owner (`duck override` "
@@ -1202,6 +1204,12 @@ def cmd_selftest():
         d_cat, _, _, _ = _run_hook("pre", ow_r, env)
         reads_mean_reading = (d_wc, d_cat) == ("deny", "allow")
 
+        # the project's own configuration stays protected even after it was read
+        _run_hook("post", {"session_id": rsid, "tool_name": "Bash", "cwd": proj, "tool_input": {"command": "cat .helmet-duck.json"}}, env)
+        d_cfg, _, _, _ = _run_hook("pre", {"session_id": rsid, "tool_name": "Bash", "cwd": proj,
+                                            "tool_input": {"command": "echo '{}' > .helmet-duck.json"}}, env)
+        config_write_refused = d_cfg == "deny"
+
         # the override must open a gate, and only while fresh
         ov = pathlib.Path(env["HELMET_DUCK_OVERRIDE"])
         ov.write_text("")
@@ -1247,7 +1255,7 @@ def cmd_selftest():
         never_denies = r.returncode == 0 and "permissionDecision" not in r.stdout and "DISSENT [" in r.stdout
 
     ok = (not missed and not false_pos and not bad_exit and not malformed and not slow
-          and read_ledger_flips and evidence_flips and evidence_bound and config_holds and reads_mean_reading
+          and read_ledger_flips and evidence_flips and evidence_bound and config_holds and reads_mean_reading and config_write_refused
           and override_works and can_fail and drift_closes
           and not d_missed and not d_false and never_denies and d_ms < BUDGET_MS and acceptance_arms)
     print("helmet-duck %s -- selftest" % VERSION)
@@ -1262,6 +1270,7 @@ def cmd_selftest():
     print("  evidence bound to cmd+tree : %s (%s, %s)" % (evidence_bound, d_other_cmd, d_other_tree))
     print("  project file cannot disarm : %s (%s)" % (config_holds, d_disarm))
     print("  reads mean reading         : %s (wc %s, cat %s)" % (reads_mean_reading, d_wc, d_cat))
+    print("  project config write       : %s (%s after a read)" % (config_write_refused, d_cfg))
     print("  override opens, then ages  : %s (%s -> %s)" % (override_works, d_ov, d_ov_stale))
     print("  test can fail (mutated)    : %s" % can_fail)
     print("  drift fails closed         : %s" % drift_closes)
