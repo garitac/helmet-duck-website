@@ -5,7 +5,8 @@ Description: >-
   strict CSP, an edge router (www to apex, directory index, honest 404), and Route 53
   alias records, access logs for the sentry, DNS hygiene records (CAA, MX, SPF, DMARC;
   pointing at SES when infra/mail.yaml is applied) and, when an alert email is given, a monthly budget alert and a request-flood
-  alarm with a brake that disables the distribution while a flood lasts. Apply in us-east-1 only: CloudFront reads certificates from that region and
+  alarm, a brake that disables the distribution while a flood lasts, and an edge blocklist
+  that refuses flooding addresses before any bandwidth is spent. Apply in us-east-1 only: CloudFront reads certificates from that region and
   from nowhere else.
 
 # One stack, one environment (prod). The bucket is PRIVATE (all public access
@@ -56,6 +57,12 @@ Parameters:
       none: the zone says the domain sends and receives no mail (null MX, SPF fail-all).
       ses: the apex MX and SPF point at Amazon SES; the identity, DKIM, MAIL FROM records,
       receipt rule and forwarder live in infra/mail.yaml. tools/apply.sh sets this.
+
+  BlockAt:
+    Type: Number
+    Default: 600
+    MinValue: 50
+    Description: Requests from one address within one access-log file (a few minutes of one edge) that get the address refused at the edge for an hour. A visitor to a five-page site makes a few dozen.
 
 Conditions:
   HasAlertEmail: !Not [!Equals [!Ref AlertEmail, ""]]
@@ -130,6 +137,9 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true       # each delivered log file wakes the blocklist keeper
       LifecycleConfiguration:
         Rules:
           - Id: expire-logs
@@ -180,6 +190,8 @@ Resources:
               Value: "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()"
               Override: true
 
+  # First the blocklist: addresses the keeper below has written between the
+  # markers are refused with 429 before a byte of the site is served. Then
   # www -> apex (301), directory index, and an honest 404 for unknown routes:
   # an extensionless path becomes <path>/index.html and 404s if absent. It is
   # never masked to the home page.
@@ -194,6 +206,12 @@ Resources:
       FunctionCode: !Sub |
         function handler(event) {
           var request = event.request;
+          var blocked = /*BLOCKLIST*/{}/*END*/;
+          var until = blocked[event.viewer.ip];
+          if (until && until > Date.now() / 1000) {
+            return { statusCode: 429, statusDescription: 'Too Many Requests',
+                     headers: { 'cache-control': { value: 'no-store' }, 'retry-after': { value: '3600' } } };
+          }
           var host = request.headers.host ? request.headers.host.value : '';
           var uri = request.uri;
           if (host === 'www.${SiteDomain}') {
@@ -564,6 +582,135 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt BrakeTick.Arn
 
+  # The edge blocklist keeper. Each access-log file that lands wakes it; it counts
+  # requests per address in that file, and an address at or above BlockAt is written
+  # into the edge function's blocklist for an hour, a day if it was listed before.
+  # The list lives in the function's own code between two markers, republished on
+  # change; entries are forgotten a day after they expire. Refused requests cost
+  # no bandwidth. Addresses never appear in mail or logs, only their hashes.
+  KeeperRole:
+    Type: AWS::IAM::Role
+    Condition: HasAlertEmail
+    Properties:
+      Description: The blocklist keeper may read access logs, rewrite and publish the edge function, and notify the alert topic.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: keeper
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "${LogBucket.Arn}/cloudfront/*"
+              - Effect: Allow
+                Action:
+                  - cloudfront:GetFunction
+                  - cloudfront:DescribeFunction
+                  - cloudfront:UpdateFunction
+                  - cloudfront:PublishFunction
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:function/helmet-duck-${Env}-edge-router"
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref AlertTopic
+  Keeper:
+    Type: AWS::Lambda::Function
+    Condition: HasAlertEmail
+    Properties:
+      Description: Reads each new access-log file and writes flooding addresses into the edge function's blocklist.
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt KeeperRole.Arn
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          FUNCTION_NAME: !Sub "helmet-duck-${Env}-edge-router"
+          TOPIC: !Ref AlertTopic
+          BLOCK_AT: !Ref BlockAt
+      Code:
+        ZipFile: |
+          import gzip, hashlib, json, os, re, time
+          import boto3
+          s3, cf, sns = boto3.client("s3"), boto3.client("cloudfront"), boto3.client("sns")
+          FN, TOPIC, BLOCK_AT = os.environ["FUNCTION_NAME"], os.environ["TOPIC"], int(os.environ["BLOCK_AT"])
+          FIRST, REPEAT = 3600, 86400
+          MARK = re.compile(r"/\*BLOCKLIST\*/(.*?)/\*END\*/", re.S)
+
+          def counts_in(bucket, key):
+              raw = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
+              text = (gzip.decompress(raw) if key.endswith(".gz") else raw).decode("utf-8", "replace")
+              fields, counts = None, {}
+              for line in text.splitlines():
+                  if line.startswith("#Fields:"):
+                      fields = line.split(":", 1)[1].split()
+                      continue
+                  if line.startswith("#") or not fields:
+                      continue
+                  p = line.split("\t")
+                  if len(p) >= len(fields):
+                      ip = p[fields.index("c-ip")]
+                      counts[ip] = counts.get(ip, 0) + 1
+              return counts
+
+          def handler(event, _):
+              now = int(time.time())
+              d = event.get("detail") or {}
+              counts = counts_in(d["bucket"]["name"], d["object"]["key"]) if d else {}
+              offenders = sorted(ip for ip, n in counts.items() if n >= BLOCK_AT)
+              got = cf.get_function(Name=FN, Stage="DEVELOPMENT")
+              code = got["FunctionCode"].read().decode()
+              m = MARK.search(code)
+              current = json.loads(m.group(1) or "{}")
+              kept = {ip: t for ip, t in current.items() if t > now - REPEAT}
+              for ip in offenders:
+                  kept[ip] = now + (REPEAT if ip in current else FIRST)
+              summary = {"requests": sum(counts.values()), "clients": len(counts),
+                         "blocked": [hashlib.sha256(i.encode()).hexdigest()[:12] for i in offenders], "listed": len(kept)}
+              if kept == current:
+                  print(json.dumps(summary))
+                  return
+              new = code[:m.start(1)] + json.dumps(kept, separators=(",", ":")) + code[m.end(1):]
+              cfg = cf.describe_function(Name=FN, Stage="DEVELOPMENT")["FunctionSummary"]["FunctionConfig"]
+              up = cf.update_function(Name=FN, IfMatch=got["ETag"], FunctionConfig=cfg, FunctionCode=new.encode())
+              cf.publish_function(Name=FN, IfMatch=up["ETag"])
+              if offenders:
+                  sns.publish(TopicArn=TOPIC, Subject="helmet-duck edge blocklist: %d address(es) refused" % len(offenders),
+                              Message="%d address(es) made %d or more requests within one access-log file and are refused at the edge (429) for an hour, a day if seen before. Addresses are not written here; the keeper's log holds their hashes. Clear the list with tools/blocklist.sh clear." % (len(offenders), BLOCK_AT))
+              print(json.dumps(summary))
+  KeeperOnNewLog:
+    Type: AWS::Events::Rule
+    Condition: HasAlertEmail
+    Properties:
+      Description: A new CloudFront access-log file in the log bucket wakes the blocklist keeper.
+      State: ENABLED
+      EventPattern:
+        source: [aws.s3]
+        detail-type: ["Object Created"]
+        detail:
+          bucket:
+            name: [!Ref LogBucket]
+          object:
+            key:
+              - prefix: cloudfront/
+      Targets:
+        - Id: keeper
+          Arn: !GetAtt Keeper.Arn
+  KeeperFromEvents:
+    Type: AWS::Lambda::Permission
+    Condition: HasAlertEmail
+    Properties:
+      FunctionName: !Ref Keeper
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt KeeperOnNewLog.Arn
+
 Outputs:
   BucketName:
     Description: GitHub environment variable SITE_BUCKET.
@@ -587,3 +734,9 @@ Outputs:
   BrakeFunctionName:
     Condition: HasAlertEmail
     Value: !Ref Brake
+  KeeperFunctionName:
+    Condition: HasAlertEmail
+    Value: !Ref Keeper
+  EdgeFunctionName:
+    Description: tools/blocklist.sh reads and clears the blocklist inside this function.
+    Value: !Ref EdgeRouter
