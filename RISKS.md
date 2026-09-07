@@ -66,5 +66,6 @@ authority to install software on it. Whoever modifies Helmet Duck, redistributes
 it, or installs it on a system they do not own is solely responsible for the
 consequences and for any claim by that system's owner or by anyone affected,
 and agrees to hold the author harmless from such claims. These terms are
-governed by the laws of Japan. The full terms are at
+governed by the laws of Japan, where the author is based; mandatory consumer
+protections of your own country apply regardless. The full terms are at
 https://helmetduck.com/terms.html.
