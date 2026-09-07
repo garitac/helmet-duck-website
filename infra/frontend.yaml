@@ -5,7 +5,7 @@ Description: >-
   strict CSP, an edge router (www to apex, directory index, honest 404), and Route 53
   alias records, access logs for the sentry, DNS hygiene records (CAA, MX, SPF, DMARC;
   pointing at SES when infra/mail.yaml is applied) and, when an alert email is given, a monthly budget alert and a request-flood
-  alarm. Apply in us-east-1 only: CloudFront reads certificates from that region and
+  alarm with a brake that disables the distribution while a flood lasts. Apply in us-east-1 only: CloudFront reads certificates from that region and
   from nowhere else.
 
 # One stack, one environment (prod). The bucket is PRIVATE (all public access
@@ -406,6 +406,164 @@ Resources:
           Subscribers:
             - { SubscriptionType: EMAIL, Address: !Ref AlertEmail }
 
+  # The brake. When the flood alarm fires, this function disables the distribution
+  # and waits: an hour the first time, twice as long each repeat, a day at most,
+  # resetting after a quiet day. A scheduled tick re-enables it when the wait is
+  # over. It bounds the bill; it does not keep the site up. The owner can release
+  # it early or switch it off: tools/brake.sh. Free at this volume.
+  BrakeState:
+    Type: AWS::SSM::Parameter
+    Condition: HasAlertEmail
+    Properties:
+      Name: !Sub "/helmet-duck/${Env}/brake"
+      Type: String
+      Value: '{"count": 0}'
+      Description: helmet-duck brake state (count, last_alarm, until, off). Written by the brake function and tools/brake.sh.
+  BrakeRole:
+    Type: AWS::IAM::Role
+    Condition: HasAlertEmail
+    Properties:
+      Description: The brake may read and toggle this one distribution, keep its state, and notify the alert topic.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: brake
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:UpdateDistribution
+                Resource: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/helmet-duck/${Env}/brake"
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref AlertTopic
+  Brake:
+    Type: AWS::Lambda::Function
+    Condition: HasAlertEmail
+    Properties:
+      Description: Disables the helmetduck.com distribution when the flood alarm fires; re-enables it after a growing wait.
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt BrakeRole.Arn
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          DISTRIBUTION_ID: !Ref Distribution
+          PARAM: !Sub "/helmet-duck/${Env}/brake"
+          TOPIC: !Ref AlertTopic
+          ALARM_NAME: !Sub "helmet-duck-${Env}-request-flood"
+      Code:
+        ZipFile: |
+          import json, os, time
+          import boto3
+          cf, ssm, sns = boto3.client("cloudfront"), boto3.client("ssm"), boto3.client("sns")
+          DIST, PARAM, TOPIC, ALARM = (os.environ[k] for k in ("DISTRIBUTION_ID", "PARAM", "TOPIC", "ALARM_NAME"))
+          BASE, CAP, QUIET = 3600, 86400, 86400
+
+          def state():
+              try:
+                  return json.loads(ssm.get_parameter(Name=PARAM)["Parameter"]["Value"])
+              except Exception:
+                  return {}
+
+          def save(s):
+              ssm.put_parameter(Name=PARAM, Value=json.dumps(s), Type="String", Overwrite=True)
+
+          def set_enabled(on):
+              r = cf.get_distribution_config(Id=DIST)
+              cfg = r["DistributionConfig"]
+              if cfg["Enabled"] == on:
+                  return False
+              cfg["Enabled"] = on
+              cf.update_distribution(Id=DIST, IfMatch=r["ETag"], DistributionConfig=cfg)
+              return True
+
+          def say(subject, body):
+              sns.publish(TopicArn=TOPIC, Subject=subject[:99], Message=body)
+
+          def when(ts):
+              return time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(ts))
+
+          def handler(event, _):
+              now = int(time.time())
+              s = state()
+              if s.get("off"):
+                  print("brake switched off by the owner; nothing done")
+                  return
+              for rec in event.get("Records", []):
+                  try:
+                      m = json.loads(rec["Sns"]["Message"])
+                  except Exception:
+                      continue
+                  if m.get("AlarmName") != ALARM or m.get("NewStateValue") != "ALARM":
+                      continue
+                  if now - s.get("last_alarm", 0) > QUIET:
+                      s["count"] = 0
+                  s["count"] = s.get("count", 0) + 1
+                  s["last_alarm"] = now
+                  wait = min(BASE * 2 ** (s["count"] - 1), CAP)
+                  s["until"] = now + wait
+                  changed = set_enabled(False)
+                  save(s)
+                  say("helmet-duck brake engaged", "The flood alarm fired (%d in a row). Distribution %s is disabled for %d minutes, until %s. Release early with tools/brake.sh release." % (s["count"], DIST, wait // 60, when(s["until"])))
+                  print(json.dumps({"brake": "engaged", "count": s["count"], "until": s["until"], "changed": changed}))
+                  return
+              if event.get("tick") and s.get("until") and now >= s["until"]:
+                  changed = set_enabled(True)
+                  s["until"] = 0
+                  save(s)
+                  if changed:
+                      say("helmet-duck brake released", "Distribution %s is enabled again at %s. If the flood continues the alarm fires again and the next wait is longer (%d in a row so far)." % (DIST, when(now), s.get("count", 0)))
+                  print(json.dumps({"brake": "released", "changed": changed}))
+  BrakeFromTopic:
+    Type: AWS::Lambda::Permission
+    Condition: HasAlertEmail
+    Properties:
+      FunctionName: !Ref Brake
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref AlertTopic
+  BrakeSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasAlertEmail
+    Properties:
+      TopicArn: !Ref AlertTopic
+      Protocol: lambda
+      Endpoint: !GetAtt Brake.Arn
+  BrakeTick:
+    Type: AWS::Events::Rule
+    Condition: HasAlertEmail
+    Properties:
+      Description: Every fifteen minutes the brake checks whether its wait is over.
+      ScheduleExpression: rate(15 minutes)
+      State: ENABLED
+      Targets:
+        - Id: brake
+          Arn: !GetAtt Brake.Arn
+          Input: '{"tick": true}'
+  BrakeFromTick:
+    Type: AWS::Lambda::Permission
+    Condition: HasAlertEmail
+    Properties:
+      FunctionName: !Ref Brake
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt BrakeTick.Arn
+
 Outputs:
   BucketName:
     Description: GitHub environment variable SITE_BUCKET.
@@ -426,3 +584,6 @@ Outputs:
   AlertTopicArn:
     Condition: HasAlertEmail
     Value: !Ref AlertTopic
+  BrakeFunctionName:
+    Condition: HasAlertEmail
+    Value: !Ref Brake

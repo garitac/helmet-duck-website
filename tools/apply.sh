@@ -80,7 +80,7 @@ FRONTEND_PARAMS+=("MailProvider=$MAIL_PROVIDER")
 echo "== stack $FRONTEND_STACK ($REGION): certificate, bucket, distribution, DNS"
 aws cloudformation deploy --template-file infra/frontend.yaml --stack-name "$FRONTEND_STACK" \
   --parameter-overrides "${FRONTEND_PARAMS[@]}" \
-  --region "$REGION" --profile "$PROFILE" --no-fail-on-empty-changeset
+  --capabilities CAPABILITY_IAM --region "$REGION" --profile "$PROFILE" --no-fail-on-empty-changeset
 BUCKET="$(out "$FRONTEND_STACK" BucketName)"
 DIST="$(out "$FRONTEND_STACK" DistributionId)"
 CFDOMAIN="$(out "$FRONTEND_STACK" DistributionDomainName)"
