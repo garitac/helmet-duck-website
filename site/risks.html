@@ -15,7 +15,7 @@
     <img src="/assets/duck.svg" alt="" width="72" height="72">
     <div>
       <h1>Risks and mitigations</h1>
-      <p>Version 0.2.0 · effective 2026-09-06 · the same text ships in the repository as <code>RISKS.md</code>.</p>
+      <p>Statement of 2026-09-07, for Helmet Duck 0.4.0 and later until replaced · the same text ships in the repository as <code>RISKS.md</code>.</p>
     </div>
   </header>
   <main>
@@ -28,9 +28,8 @@
     <section>
       <h2>What it can and cannot do to your system</h2>
       <ul>
-        <li>It can refuse an action your agent attempts through the shell, file-edit and patch tools (Bash, Write, Edit and Codex's apply_patch), stop a turn from ending, and add text to the agent's context.</li>
-        <li>It cannot run commands of its own, modify your files, delete anything, or make an agent do anything. It only refuses, advises and records.</li>
-        <li>It writes only under <code>~/.helmet-duck</code>. Its only network connection is a licence activation that you start yourself.</li>
+        <li>As hooks, it can refuse an action your agent attempts through the shell, file-edit and patch tools (Bash, Write, Edit and Codex's apply_patch), stop a turn from ending, and add text to the agent's context. As hooks it runs no command of its own, modifies no file of yours, deletes nothing, and opens no network connection. It only refuses, advises and records, under <code>~/.helmet-duck</code>.</li>
+        <li>As commands you run yourself in a terminal: <code>duck evidence</code> runs the check command your project declares, in that project; <code>duck seal</code> writes <code>MANIFEST.json</code> beside the installed duck; <code>duck accept</code>, <code>duck override</code> and the ledger commands write under <code>~/.helmet-duck</code>; <code>duck licence activate</code> makes one network call to the licence vendor. An agent's shell is refused override, accept, seal and licence.</li>
       </ul>
     </section>
 
@@ -42,7 +41,7 @@
         <tbody>
           <tr><td>1</td><td>A false refusal</td><td>A legitimate action is refused: an overwrite of a file the duck did not see you read, a command matching a known-bad pattern, a commit without fresh evidence.</td><td>Every refusal names its gate and the way out in one fixed sentence. <code>duck override</code> opens every gate for 30 minutes. Uninstalling removes everything.</td><td>Friction, and the time to read the refusal.</td></tr>
           <tr><td>2</td><td>Fail-closed on a defect</td><td>If the duck crashes, or its file no longer matches its sealed manifest, it refuses every Bash, Write and Edit until you override or uninstall. This is the one way it can truly stop an agent.</td><td>Deliberate: a broken guard must not become a silent allow. The selftest runs before every release. The override and uninstall always work.</td><td>A stopped agent, never a damaged system.</td></tr>
-          <tr><td>3</td><td>Missed catches</td><td>It does not see a claim made in prose, a write whose path is assembled at runtime inside another program, or a defect shape it has no pattern for. The mirror's recall is partial.</td><td>Stated here and in every report the duck prints.</td><td>You must not rely on Helmet Duck as a guarantee that an agent behaves. It reduces some failures; it prevents none with certainty.</td></tr>
+          <tr><td>3</td><td>Missed catches</td><td>It does not see a claim made in prose, a write whose path is assembled at runtime inside another program, or a defect shape it has no pattern for. A <code>head</code> or <code>tail</code> counts as a read of the whole file. The mirror's recall is partial.</td><td>Stated here and in every report the duck prints.</td><td>You must not rely on Helmet Duck as a guarantee that an agent behaves. It reduces some failures; it prevents none with certainty.</td></tr>
           <tr><td>4</td><td>Turn-end blocking</td><td>The turn cannot end while claims are open in the ledger.</td><td>Capped at two blocks in a row, then allowed and logged. It cannot loop.</td><td>Two extra turns at most.</td></tr>
           <tr><td>5</td><td>Latency</td><td>About 100 milliseconds are added to each tool call.</td><td>Measured under 150 milliseconds in the selftest on ordinary hardware.</td><td>Slower tool calls.</td></tr>
           <tr><td>6</td><td>Reading your transcripts</td><td>The mirror reads every transcript your agent harness keeps on this machine, for every project, to count the moments the machine caught the agent.</td><td>Everything stays under <code>~/.helmet-duck</code>. Nothing is transmitted. You can disable the SessionStart hook or delete the mirror's files.</td><td>That a plugin reads local transcripts that may contain your other work.</td></tr>
@@ -54,6 +53,7 @@
           <tr><td>12</td><td>Wrong or outdated documentation</td><td>This page, the README and the site may lag behind the code.</td><td>The code is the authority; every claim here names the mechanism you can read.</td><td>Reading the code when it matters.</td></tr>
           <tr><td>13</td><td>Modified copies</td><td>Anyone can edit the source. A modified duck may refuse the wrong things, refuse nothing, or do harm the original cannot.</td><td>A sealed duck fails closed when its file no longer matches its manifest, so a modified copy announces itself. The author distributes only through the repository named on this site.</td><td>A modified copy is not Helmet Duck. Whoever modified it owns everything it does; the author is not liable for it.</td></tr>
           <tr><td>14</td><td>Installation on a system you do not own</td><td>Helmet Duck reads transcripts and refuses actions on whatever machine it is installed on, with that machine's user privileges. Installing it on someone else's system, or without the authority to do so, is a decision the installer makes.</td><td>Acceptance is recorded per user on the machine, with the user name, version and time.</td><td>Whoever installs it is solely responsible for having the authority to do so and for that system's owner; the author is not liable to the installer, to the system's owner, or to anyone affected.</td></tr>
+          <tr><td>15</td><td>The boundary is the agent's tools</td><td>The gates refuse what an agent does through its tools: its shell, its file edits, its patches, the owner's commands when the agent tries them. A person at the keyboard can still run <code>duck override</code>, edit a file by hand, or uninstall.</td><td>Deliberate: the owner must always be able to stop or open the duck. Protection is against an agent's mistakes, not against a person with access to the machine.</td><td>That Helmet Duck is not an access control and must not be relied on as one.</td></tr>
         </tbody>
       </table>
       </div>

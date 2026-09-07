@@ -1,6 +1,6 @@
 # Helmet Duck
 
-**The rules an AI coding agent cannot skip, because the harness refuses.**
+**Deterministic hooks that block common coding-agent mistakes, in the harness, not in the prompt.**
 
 Everything an agent is told is advice, and advice is exactly what an agent skips
 when it decides it already knows. Helmet Duck is not advice. At each hook event a
@@ -14,8 +14,11 @@ Between June and August 2026 one owner spent a large amount of money on coding
 agents and got no product back. The agents worked from memory instead of reading
 the tree, appended notes to files they had never opened, committed without running
 the tests, spawned audits of audits, and asserted every wrong thing with full
-confidence. The first version of these hooks, installed on 2026-09-05, caught the
-agent 242 times in its first week. This is that harness, generalised, for Claude Code and Codex.
+confidence. The mirror, run on 2026-09-07 over fourteen days of the author's own transcripts,
+found 353 moments where the machinery caught the agent (229 failed assertions, 78 gate
+refusals, 44 syntax errors, 2 denials), 75 of them since the hooks went in on 2026-09-05,
+with 141 more inside test suites counted apart. This is that harness, generalised, for
+Claude Code and Codex.
 
 ## What it does
 
@@ -23,9 +26,9 @@ agent 242 times in its first week. This is that harness, generalised, for Claude
 | --- | --- | --- |
 | **G0 known-bad forms** | before a tool runs | `--no-verify`, a heredoc through ssh, a force-push, `rm -rf` on a root, and a canary literal are refused with the same words every time. Configurable. |
 | **G1 overwrite unread** | before a tool runs | A shell overwrite of an existing file the agent has not read this session is refused. The harness already refuses this for its Edit and Write tools; G1 closes the shell routes around that. |
-| **G2 commit unevidenced** | before a tool runs | In a project that declares an evidence command, `git commit` is refused unless `duck evidence` ran that command and recorded PASS within the last 30 minutes. Opt-in per project. |
+| **G2 commit unevidenced** | before a tool runs | In a project that declares an evidence command, `git commit` is refused unless `duck evidence` ran that same command and recorded PASS within the last 30 minutes on the same tree. `git -C dir commit` is seen. Opt-in per project. |
 | **G3 stop unfinished** | when the turn ends | The turn cannot end with open dissent claims, or (opt-in) a dirty worktree. Capped at two blocks in a row, then allowed and logged: a gate that can loop is a cost. |
-| **G4 self-protection** | before a tool runs | Writes to the duck, its state, the harness settings and hooks, and the override file are refused. A duck whose hash differs from its sealed manifest fails closed. A gate the agent can edit is advice. |
+| **G4 self-protection** | before a tool runs | Writes to the duck, its state, the harness settings and hooks, the override file and the project's own configuration are refused, and so are the owner's commands (override, accept, seal, licence) when an agent runs them. A project file may tighten the gates, never loosen them. A duck whose hash differs from its sealed manifest fails closed. A gate the agent can edit is advice. |
 | **Owner override** | terminal | `duck override` opens every gate for 30 minutes, logged. The agent cannot do this (G4). |
 | **Dissent chair** | before a tool runs | A deterministic classifier recognises four defect classes agents repeat and prints the one question a real check would have asked, with that class's measured default rate. Advisory. It never denies. |
 | **Mirror** | session start | Sweeps the harness's own transcripts for the moments the machine caught the agent and opens the session with the count. The agent's inside view is not consulted, because its inside view is the problem. |
@@ -38,6 +41,8 @@ Stated rather than pretended:
 - It does not see a claim made from memory in prose. No event fires when the model thinks. Those claims are opened by hand with `duck claim` and closed with `repay` or `default`.
 - It does not see writes whose path is assembled at runtime inside another program.
 - The mirror's recall is partial. A wrong claim spoken fluently leaves no error signature.
+- A `head` or `tail` counts as a read of the whole file: the ledger records that content was shown, not how much.
+- The boundary is the agent's tools. A person at the keyboard can run `duck override`, edit a file by hand, or uninstall. It protects against an agent's mistakes, not against a person.
 
 ## Risks first
 
@@ -57,12 +62,18 @@ unclear because it was not in English.
 ```
 
 Then, from a terminal, record your acceptance and seal the installed copy so an
-edited duck fails closed:
+edited duck fails closed. You type these, never the agent, which is refused them.
+The plugin installs under `~/.claude/plugins/cache/helmet-duck/helmet-duck/<version>/`:
 
 ```
-duck accept
-duck seal
+DUCK="$(ls -d ~/.claude/plugins/cache/helmet-duck/helmet-duck/*/duck.py | tail -1)"
+python3 "$DUCK" accept && python3 "$DUCK" seal
+python3 "$DUCK" status
 ```
+
+Expected in the status: `risks accepted (armed) : yes` and `sealed : yes`. Then, inside
+a session, ask the agent to run `echo HELMET-DUCK-CANARY-DENY`; the harness answers
+`GATE G0: canary: the deny channel is live`.
 
 Uninstall with `/plugin uninstall helmet-duck@helmet-duck`; deleting `~/.helmet-duck`
 removes every record it kept.
