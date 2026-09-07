@@ -144,33 +144,38 @@ start_local() {
   remove_supervisor_job
   local env_args=(HOME="$HOME" PATH="$PATH" HELMET_DUCK_ADMIN_PROFILE="$PROFILE" HELMET_DUCK_AWS_BIN="$AWS_BIN"
                   HELMET_DUCK_GH_BIN="$GH_BIN" HELMET_DUCK_CONSOLE_REVISION="$EXPECTED_REVISION")
+  local mode=detached
+  [ -e "$LOG_FILE" ] && mv -f "$LOG_FILE" "$LOG_FILE.prev"    # a fresh log is the evidence that launchd spawned the job
   if [ "$PLATFORM" = Darwin ]; then
+    # First choice: a per-user launchd job, supervised and independent of this window.
     launchctl submit -l "$LABEL" -o "$LOG_FILE" -e "$LOG_FILE" -- \
-      /usr/bin/env "${env_args[@]}" "$PY_BIN" "$REPO_DIR/tools/console/server.py" --port "$PORT" --no-open
-    pid=""
-  else
+      /usr/bin/env "${env_args[@]}" "$PY_BIN" "$REPO_DIR/tools/console/server.py" --port "$PORT" --no-open || true
+    for _ in $(seq 1 30); do [ -e "$LOG_FILE" ] && break; sleep 0.1; done   # launchd creates the log when it spawns
+    if [ -e "$LOG_FILE" ]; then
+      mode=launchd; pid=""
+    else
+      echo "launchd accepted the job but spawned nothing within 3 seconds; state:" >&2
+      launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null | grep -E "state|last exit|error" | head -4 >&2 || true
+      remove_supervisor_job
+      echo "starting the console as a detached process instead" >&2
+    fi
+  fi
+  if [ "$mode" = detached ]; then
     ( cd "$REPO_DIR"; nohup env "${env_args[@]}" "$PY_BIN" tools/console/server.py --port "$PORT" --no-open >>"$LOG_FILE" 2>&1 </dev/null & write_pid "$!" )
     pid="$(tr -dc '0-9' <"$PID_FILE")"
   fi
-  for _ in $(seq 1 50); do
+  for _ in $(seq 1 150); do
     if api_ready; then
       pid="$(listener_pid)" || true
       if [ -n "$pid" ] && is_console_pid "$pid"; then
-        write_pid "$pid"; echo "$NAME is ready on $URL (pid $pid, revision ${EXPECTED_REVISION:0:12})"; open_console; return 0
+        write_pid "$pid"; echo "$NAME is ready on $URL (pid $pid, revision ${EXPECTED_REVISION:0:12}, $mode)"; open_console; return 0
       fi
     fi
     if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then break; fi
     sleep 0.1
   done
-  if [ -s "$LOG_FILE" ]; then
-    echo "$NAME failed to become ready; recent log output:" >&2
-    tail -40 "$LOG_FILE" >&2 || true
-  elif [ "$PLATFORM" = Darwin ]; then
-    echo "$NAME failed to become ready and the job wrote no log: launchd did not start it." >&2
-    echo "Run this command from a normal Terminal window (not from a sandboxed tool), then: launchctl list | grep helmetduck" >&2
-  else
-    echo "$NAME failed to become ready and wrote no log." >&2
-  fi
+  echo "$NAME failed to become ready; recent log output:" >&2
+  tail -40 "$LOG_FILE" 2>/dev/null >&2 || echo "(no log was written)" >&2
   remove_supervisor_job
   if [ -n "$pid" ] && is_console_pid "$pid"; then kill "$pid"; fi
   rm -f "$PID_FILE"
