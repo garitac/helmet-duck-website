@@ -1,7 +1,8 @@
 # Risks and mitigations
 
-Version 0.2.0. Effective 2026-09-06. Published at https://helmetduck.com/risks.html and
-shipped in this repository as `RISKS.md`. The two are the same text.
+Statement of 2026-09-07, for Helmet Duck 0.4.0 and later until replaced. Published at
+https://helmetduck.com/risks.html and shipped in this repository as `RISKS.md`. The two
+are the same text.
 
 Helmet Duck runs as hooks inside your coding agent's harness, with your user
 privileges, on your machine. Read this page before installing it. Installing,
@@ -12,13 +13,17 @@ risks on your behalf.
 
 ## What it can and cannot do to your system
 
-- It can refuse an action your agent attempts through the shell, file-edit and
-  patch tools (Bash, Write, Edit and Codex's apply_patch), stop a turn from
-  ending, and add text to the agent's context.
-- It cannot run commands of its own, modify your files, delete anything, or make
-  an agent do anything. It only refuses, advises and records.
-- It writes only under `~/.helmet-duck`. Its only network connection is a
-  licence activation that you start yourself with `duck licence activate`.
+- As hooks, it can refuse an action your agent attempts through the shell,
+  file-edit and patch tools (Bash, Write, Edit and Codex's apply_patch), stop a
+  turn from ending, and add text to the agent's context. As hooks it runs no
+  command of its own, modifies no file of yours, deletes nothing, and opens no
+  network connection. It only refuses, advises and records, under `~/.helmet-duck`.
+- As commands you run yourself in a terminal: `duck evidence` runs the check
+  command your project declares, in that project; `duck seal` writes
+  `MANIFEST.json` beside the installed duck; `duck accept`, `duck override` and
+  the ledger commands write under `~/.helmet-duck`; `duck licence activate`
+  makes one network call to the licence vendor. An agent's shell is refused
+  override, accept, seal and licence.
 
 ## The risks
 
@@ -26,7 +31,7 @@ risks on your behalf.
 | --- | --- | --- | --- | --- |
 | 1 | A false refusal | A legitimate action is refused: an overwrite of a file the duck did not see you read, a command that matches a known-bad pattern, a commit without fresh evidence. | Every refusal names its gate and the way out in one fixed sentence. `duck override` opens every gate for 30 minutes. Uninstalling removes everything. | Friction, and the time to read the refusal. |
 | 2 | Fail-closed on a defect | If the duck itself crashes, or its file no longer matches its sealed manifest, it refuses every Bash, Write and Edit until you override or uninstall. This is the one way it can truly stop an agent. | Deliberate: a broken guard must not become a silent allow. The selftest runs before every release. The override and uninstall always work. | A stopped agent, never a damaged system. |
-| 3 | Missed catches | It does not see a claim an agent makes in prose, a write whose path is assembled at runtime inside another program, or a defect shape it has no pattern for. The mirror's recall is partial. | Stated here and in every report the duck prints. | You must not rely on Helmet Duck as a guarantee that an agent behaves. It reduces some failures; it prevents none with certainty. |
+| 3 | Missed catches | It does not see a claim an agent makes in prose, a write whose path is assembled at runtime inside another program, or a defect shape it has no pattern for. A `head` or `tail` counts as a read of the whole file. The mirror's recall is partial. | Stated here and in every report the duck prints. | You must not rely on Helmet Duck as a guarantee that an agent behaves. It reduces some failures; it prevents none with certainty. |
 | 4 | Turn-end blocking | The turn cannot end while claims are open in the ledger. | Capped at two blocks in a row, then allowed and logged. It cannot loop. | Two extra turns at most. |
 | 5 | Latency | About 100 milliseconds are added to each tool call. | Measured under 150 milliseconds in the selftest on ordinary hardware. | Slower tool calls. |
 | 6 | Reading your transcripts | The mirror reads every transcript your agent harness keeps on this machine, for every project, to count the moments the machine caught the agent. | Everything stays under `~/.helmet-duck`. Nothing is transmitted. You can disable the SessionStart hook or delete the mirror's files. | That a plugin reads local transcripts that may contain your other work. |
@@ -38,6 +43,7 @@ risks on your behalf.
 | 12 | Wrong or outdated documentation | This page, the README and the site may lag behind the code. | The code is the authority; every claim here names the mechanism you can read. | Reading the code when it matters. |
 | 13 | Modified copies | Anyone can edit the source. A modified duck may refuse the wrong things, refuse nothing, or do harm the original cannot. | A sealed duck fails closed when its file no longer matches its manifest, so a modified copy announces itself. The author distributes only through the repository named on this site. | A modified copy is not Helmet Duck. Whoever modified it owns everything it does; the author is not liable for it. |
 | 14 | Installation on a system you do not own | Helmet Duck reads transcripts and refuses actions on whatever machine it is installed on, with that machine's user privileges. Installing it on someone else's system, or without the authority to do so, is a decision the installer makes. | Acceptance is recorded per user on the machine, with the user name, version and time. | Whoever installs it is solely responsible for having the authority to do so and for that system's owner; the author is not liable to the installer, to the system's owner, or to anyone affected. |
+| 15 | The boundary is the agent's tools | The gates refuse what an agent does through its tools: its shell, its file edits, its patches, the owner's commands when the agent tries them. A person at the keyboard can still run `duck override`, edit a file by hand, or uninstall. | Deliberate: the owner must always be able to stop or open the duck. Protection is against an agent's mistakes, not against a person with access to the machine. | That Helmet Duck is not an access control and must not be relied on as one. |
 
 ## What you must do
 
