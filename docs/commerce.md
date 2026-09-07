@@ -7,7 +7,7 @@ The site links out; the counterparties collect the money and the data.
 | --- | --- | --- | --- | --- | --- |
 | GitHub Sponsors | Contributions | GitHub pays you; a gift, not a sale | 0% on personal sponsorships | Income to you; no VAT | Listing not yet enabled |
 | Lemon Squeezy | Personal tier licence keys | Lemon Squeezy, as merchant of record | About 5% + 50¢, ~7.5% effective for a non-US seller | They register and remit foreign VAT and sales tax | Store not yet created |
-| Stripe Invoicing | Team tier, Japanese companies | You, in yen | Stripe's card or bank-transfer fee | Domestic consumption tax as for any business invoice | Stripe account exists and worked in sandbox; live verification to confirm |
+| Stripe Invoicing | Team licences, for a Japanese company that needs a domestic invoice | You, in yen | Stripe's card or bank-transfer fee | Domestic consumption tax as for any business invoice | Stripe account exists and worked in sandbox; live verification to confirm |
 
 ## 1. GitHub Sponsors (owner, about 15 minutes)
 
@@ -39,13 +39,16 @@ Why Lemon Squeezy rather than Paddle: both are merchants of record; only Lemon
 Squeezy issues licence keys natively, and the duck's `licence` command speaks
 its API. Paddle would mean building key issuance yourself.
 
-## 3. Stripe Invoicing for the Team tier (owner)
+## 3. The Team tier is a licence, not a service (owner)
 
-The Team tier is installation, a custom gate and half a day with you, sold to a
-Japanese company. Send a Stripe invoice in yen from the existing Stripe account;
-the buyer pays by card or bank transfer. Domestic sale, domestic tax, no
-merchant of record needed. Live-mode verification in the Stripe dashboard is the
-one precondition; you confirmed the account worked in sandbox.
+The Team tier is one licence for up to ten machines and nothing else: no
+installation, no custom gate, no hours. One person in Japan cannot promise time to
+companies anywhere in the world, and the page says so (decided 2026-09-07). Sell it
+through Lemon Squeezy like Personal, as a second product or as a quantity. A
+Japanese company that needs a domestic invoice in yen can be sent one from the
+existing Stripe account instead: card or bank transfer, domestic tax, no merchant
+of record; live-mode verification in the Stripe dashboard is the one precondition.
+Either way the sale carries no obligation of anyone's time.
 
 ## 4. Legal pages
 

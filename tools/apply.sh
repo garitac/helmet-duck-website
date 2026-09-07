@@ -148,10 +148,9 @@ PY
 
 echo
 echo "Applied. Next:"
-echo "  1. If an alert email was given, confirm the SNS subscription mail it just received."
-echo "  2. Commit environments/prod.env.yaml through a pull request."
-echo "  3. Run both watchers once and read their summaries:"
+echo "  1. The first time an alert address is given, confirm the mail AWS Notifications sends to it."
+echo "  2. If environments/prod.env.yaml changed, commit it through a pull request (tools/mail.sh does this for mail)."
+echo "  3. The watchers run on schedule; to run them now:"
 echo "       gh workflow run sentinel.yml -R $REPO --ref main"
 echo "       gh workflow run sentry.yml -R $REPO --ref main"
-echo "  4. Flip dns_hygiene_required and transfer_lock_required to True in tools/sentinel.py."
 echo "  Publishing is still the deploy workflow: gh workflow run deploy.yml -R $REPO --ref main -f dry_run=true"

@@ -102,9 +102,10 @@ duck licence status | deactivate
 
 ## Money
 
-Sponsorship through GitHub Sponsors, Personal licences through a merchant of
-record, Team engagements invoiced in yen. No payment code lives here; see
-[docs/commerce.md](docs/commerce.md).
+Sponsorship through GitHub Sponsors; Personal and Team licences through a merchant
+of record. Software only: no installation service, no custom work, no hours. The
+author is one person, and support is the public issue tracker, in English, as time
+allows. No payment code lives here; see [docs/commerce.md](docs/commerce.md).
 
 ## Configuration
 
