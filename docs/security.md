@@ -22,8 +22,8 @@ from `main`.
 | Pipeline | Deploy only by manual dispatch from `main`; OIDC role with PutObject and invalidation only; the role trusts only this repository's `prod` Environment, and that Environment accepts only protected branches | verified |
 | Repository | `main` protected: no force-push, no deletion, linear history, the CI check required, admins included; every merge is a squash commit signed by GitHub; SHA pinning required for actions; wiki off; secret scanning with push protection; private vulnerability reporting; Dependabot for the action pins | set 2026-09-07 |
 | Domain | Route 53 delegation pinned in the sentinel; CAA restricting issuance to Amazon's CAs; DMARC reject; either null MX with SPF fail-all, or SES's MX, SPF, DKIM and MAIL FROM records once the mail stack exists; registrar transfer lock on helmetduck.com and helmet-duck.com | live since 2026-09-07; the sentinel requires them |
-| Money | Monthly budget alert at 80% actual and 100% forecast; CloudFront request-flood alarm, one hour, email | after the apply, when an alert email is given |
-| Watchers | Sentinel every six hours with no credentials; sentry every six hours through a read-only role | sentinel live from the merge; sentry armed by the apply |
+| Money | Monthly budget alert at 80% actual and 100% forecast; CloudFront request-flood alarm, one hour, email; the brake: on alarm the distribution is disabled for an hour, twice as long on each repeat up to a day, and re-enabled by a scheduled tick; bounds the bill, does not keep the site up | alerts live 2026-09-07; brake after the next apply |
+| Watchers | Sentinel every hour with no credentials; sentry every six hours through a read-only role | both live |
 | Detection of the operator | The sentinel opens an issue when a law breaks and closes it when the site heals; the sentry does the same for red log findings; both fail their run so the Actions email goes red | live with the sentinel |
 
 ## The sentinel
@@ -76,8 +76,10 @@ issue is opened only when a finding is red.
 ## Not done, and why
 
 - DNSSEC: the signing key costs about 1 USD a month. Not free, not yet.
-- WAF with rate limiting: about 10 USD a month. The alarm and the sentry watch
-  volume instead.
+- WAF with rate limiting: about 6 USD a month plus usage. The alarm, the sentry and
+  the brake stand in for it: the brake bounds the bill, it cannot keep the site up
+  under a flood. Shield Standard, AWS's network-level flood protection, is on with
+  CloudFront at no cost.
 - A CloudTrail trail and GuardDuty: storage and per-event fees. CloudTrail's free
   90-day event history is on by default.
 - A rule requiring signed commits. It was tried and removed the same day: GitHub
