@@ -27,6 +27,7 @@ The security posture and the watchers are described in [security.md](security.md
 | Mail | `infra/mail.yaml`, `tools/mail.sh` | Amazon SES in us-east-1: domain identity with DKIM and MAIL FROM, receipt rule storing each message in a private bucket for 90 days, a forwarder function to the owner's mailbox, the owner's mailbox verified for the sandbox. The script runs the apply, requests production access, waits for DKIM, opens the contract pull request. SMTP credentials for replying from Gmail are the owner's. |
 | Contract | `environments/prod.env.yaml` | The one place the deploy targets are written down. |
 | Pins | `.github/dependabot.yml` | Weekly pull requests for the action SHAs. The repository requires SHA pinning. |
+| Console | `helmet-duck-console-start.command`, `tools/console/` | The owner's local, read-only web view of the live site: health, edge metrics, visitors by edge country, non-human traffic, the guard. See [console.md](console.md). |
 
 ## Apply (owner, from a terminal, any time; it is idempotent)
 

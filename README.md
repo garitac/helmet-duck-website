@@ -121,7 +121,8 @@ helmetduck.com is a static page in `site/`, built by `tools/build.py`, gated by
 watchers with no write access to anything but one issue each guard the live site:
 the sentinel rebuilds the revision the site declares and compares every file, and
 the sentry reads the access logs and defangs every client-written string before
-anyone reads it. Runbooks: [docs/deploy.md](docs/deploy.md) and
+anyone reads it. The owner reads all of it in a local console, `helmet-duck-console-start`,
+bound to this machine only ([docs/console.md](docs/console.md)). Runbooks: [docs/deploy.md](docs/deploy.md) and
 [docs/security.md](docs/security.md). Report a vulnerability through [SECURITY.md](SECURITY.md).
 
 ## Licence
