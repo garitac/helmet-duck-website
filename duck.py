@@ -15,18 +15,26 @@ THE GATES (PreToolUse / Stop)
                          Edit/Write already refuse this in the harness; G1 closes
                          the Bash routes around that.
   G2  commit unevidenced `git commit` in a project that declares an evidence
-                         command is refused unless `duck evidence` ran it and
-                         recorded PASS within max_age_minutes. Opt-in per project.
+                         command is refused unless `duck evidence` ran that same
+                         command and recorded PASS within max_age_minutes against
+                         the same tree (HEAD, tracked changes, untracked files).
+                         `git -C dir commit` and `cd dir && git commit` are seen.
+                         Opt-in per project.
   G3  stop unfinished    the turn cannot end with open dissent claims, or (opt-in)
                          a dirty worktree. Capped at two blocks in a row, then
                          allowed and logged: a gate that can loop is a spend.
   G4  self-protection    writes to the duck's own root, its state, the harness
-                         settings and hooks, and the override file are refused.
+                         settings and hooks, the override file and the project's
+                         own .helmet-duck.json are refused, and so are the owner's
+                         commands (override, accept, seal, licence) when an agent
+                         tries to run them. A project file may tighten the gates,
+                         never loosen them.
                          A duck whose sha differs from its sealed manifest fails
                          CLOSED. A gate the agent can edit is advice.
   OV  owner override     the OWNER runs `duck override` (or touches the OVERRIDE
                          file) from a terminal: every gate opens for 30 minutes,
-                         logged. The agent cannot create it (G4).
+                         logged. The agent can neither create it nor run
+                         the command (G4): a person at a terminal does.
 
 THE DISSENT CHAIR (PreToolUse, advisory, never denies)
   A deterministic classifier over the text of a pending call recognises four
@@ -73,8 +81,8 @@ TWO HARNESSES
 THE LICENCE (the only network call the duck ever makes, and only when asked)
   `duck licence activate KEY` sends the key and a label for this machine to the
   licence vendor's public License API once, records the answer under the state
-  directory, and shows the tier in `duck status`. Version 0.1 gates nothing
-  behind it: the record is the beginning of the paid tier, not a lock.
+  directory, and shows the tier in `duck status`. Nothing is gated
+  behind it yet: the record is the beginning of the paid tier, not a lock.
 """
 import argparse
 import hashlib
@@ -82,6 +90,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -89,7 +98,7 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 HOME = pathlib.Path.home()
 ROOT = pathlib.Path(__file__).resolve().parent
 STATE = pathlib.Path(os.environ.get("HELMET_DUCK_STATE", str(HOME / ".helmet-duck")))
@@ -182,10 +191,25 @@ def _config(cwd):
     root = _project_root(cwd)
     if root and (root / PROJECT_CONFIG).is_file():
         try:
-            cfg = _deep_merge(cfg, json.loads((root / PROJECT_CONFIG).read_text()))
+            cfg = _deep_merge(cfg, _project_allowed(json.loads((root / PROJECT_CONFIG).read_text()), cfg))
         except (OSError, ValueError):
             pass
     return cfg, root
+
+
+PROJECT_MAY_SET = ("evidence", "stop", "dissent")
+
+
+def _project_allowed(proj, base):
+    """A project's .helmet-duck.json may tighten, never loosen. It declares its evidence
+    command, its stop rules and its dissent floor, and may ADD forbidden patterns.
+    Gates, exempt roots and the licence vendor come only from the defaults and the
+    owner's protected user config, so a file the agent can write cannot disarm it."""
+    out = {k: v for k, v in (proj or {}).items() if k in PROJECT_MAY_SET}
+    extra = [r for r in (proj or {}).get("forbidden", []) or [] if isinstance(r, dict) and r.get("pattern")]
+    if extra:
+        out["forbidden"] = list(base.get("forbidden", [])) + extra
+    return out
 
 
 def _state_path(sid):
@@ -246,7 +270,15 @@ def _norm(tok, cwd):
 
 
 def _under(path, roots):
-    return any(path == r or path.startswith(r.rstrip("/") + "/") for r in roots)
+    """Containment in either spelling: as given, and with symlinks resolved, because a
+    macOS temp path arrives as /var/... and resolves to /private/var/..."""
+    forms = {path, os.path.realpath(path)}
+    for r in roots:
+        for root in {r, os.path.realpath(r)}:
+            for c in forms:
+                if c == root or c.startswith(root.rstrip("/") + "/"):
+                    return True
+    return False
 
 
 _REDIRECT = re.compile(r"(?<![<>0-9&])>{1,2}\s*([^\s;|&)]+)")
@@ -255,9 +287,92 @@ _SED_I = re.compile(r"\bsed\s+-i\S*\s+(.*)")
 _CP_MV = re.compile(r"\b(?:cp|mv)\s+(?:-\S+\s+)*(\S+)\s+([^\s;|&]+)")
 _OPEN_W = re.compile(r"open\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"][wa]")
 _WRITE_VERB = re.compile(r"(?<![<>0-9&])>{1,2}|\btee\b|\bsed\s+-i|\bcp\s|\bmv\s|\brm\s|\btouch\s|\bchmod\s|['\"][wa]['\"]\s*\)|\.write\(")
-_READ_VERB = re.compile(r"\b(cat|head|tail|sed\s+-n|grep|less|more|wc|diff|awk|cut|sort|jq)\b")
-_GIT_COMMIT = re.compile(r"\bgit\s+(?:-\S+\s+)*commit\b")
+# Verbs that put a file's content in front of the agent. wc, ls, stat, file, du and
+# checksums say something about a file without showing it, so they do not count.
+_READ_VERB = re.compile(r"\b(cat|head|tail|sed\s+-n|grep|less|more|bat|diff|awk|cut|sort|jq)\b")
 _TOKENS = re.compile(r"[^\s;|&()<>]+")
+# The owner's commands. They open, arm, seal or license the duck; an agent never runs
+# them. A person runs them in a terminal, where no hook fires.
+_OWNER_CMD = re.compile(r"(?:^|[\s;&|(/])duck(?:\.py)?\s+(override|accept|seal|licence)\b")
+# git's global options: those that take a separate argument, and the rest as flags.
+_GIT_WITH_ARG = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--super-prefix",
+                 "--config-env", "--list-cmds", "--attr-source"}
+_SEGMENT = re.compile(r"\s*(?:;|&&|\|\||\||\n)\s*")
+
+
+def _git_commit_dirs(cmd, cwd):
+    """Every directory in which the command would run `git commit`, honouring `cd` in
+    earlier segments and git's -C. Tokenised, not pattern-matched, so `git -C repo
+    commit` and `git -c key=value commit` are seen."""
+    here = cwd or os.getcwd()
+    dirs = []
+    for seg in _SEGMENT.split(cmd):
+        try:
+            toks = shlex.split(seg)
+        except ValueError:
+            toks = seg.split()
+        if not toks:
+            continue
+        if toks[0] == "cd" and len(toks) > 1:
+            here = os.path.normpath(os.path.join(here, os.path.expanduser(toks[1])))
+            continue
+        gi = next((i for i, t in enumerate(toks) if t == "git" or t.endswith("/git")), None)
+        if gi is None:
+            continue
+        target, i = here, gi + 1
+        while i < len(toks):
+            t = toks[i]
+            if t in _GIT_WITH_ARG:
+                if t == "-C" and i + 1 < len(toks):
+                    target = os.path.normpath(os.path.join(target, os.path.expanduser(toks[i + 1])))
+                i += 2
+            elif t.startswith("-"):
+                i += 1
+            else:
+                break
+        if i < len(toks) and toks[i] == "commit":
+            dirs.append(target)
+    return dirs
+
+
+def _read_candidates(cmd, cwd):
+    """Every token of a reading command that names an existing file, bare names
+    included, so `cat README.md` counts as reading README.md."""
+    out = []
+    for tok in _TOKENS.findall(cmd):
+        if tok.startswith("-"):
+            continue
+        p = _norm(tok, cwd)
+        if p and os.path.isfile(p):
+            out.append(p)
+    return out
+
+
+def _tree_fingerprint(root):
+    """What the evidence ran against: HEAD, every tracked change (staged or not) and
+    every untracked file's name and content. Staging alone does not change it;
+    editing anything does, so evidence cannot vouch for a tree it never saw."""
+    h = hashlib.sha256()
+
+    def git(*args):
+        try:
+            r = subprocess.run(["git", *args], cwd=str(root), capture_output=True, timeout=30)
+            return r.stdout if r.returncode == 0 else b""
+        except (OSError, subprocess.TimeoutExpired):
+            return b""
+    h.update(git("rev-parse", "HEAD"))
+    h.update(git("diff", "HEAD", "--binary", "--no-ext-diff"))
+    for name in git("ls-files", "--others", "--exclude-standard", "-z").split(b"\0"):
+        if not name:
+            continue
+        h.update(name)
+        f = pathlib.Path(root, name.decode("utf-8", "replace"))
+        try:
+            if f.is_file():
+                h.update(hashlib.sha256(f.read_bytes()).digest())
+        except OSError:
+            pass
+    return h.hexdigest()
 
 
 def _overwrite_targets(cmd, cwd):
@@ -325,7 +440,7 @@ def gate_pre(ev, cfg, root):
     ti = ev.get("tool_input", {}) or {}
     cwd = ev.get("cwd")
     sid = ev.get("session_id")
-    protected = PROTECTED_ALWAYS
+    protected = PROTECTED_ALWAYS + ([str(root / PROJECT_CONFIG)] if root is not None else [])
 
     if tool in ("Write", "Edit", "MultiEdit"):
         p = _norm(str(ti.get("file_path", "")), cwd)
@@ -367,19 +482,31 @@ def gate_pre(ev, cfg, root):
             except re.error:
                 continue
 
+    if gates.get("G4"):
+        m = _OWNER_CMD.search(cmd)
+        if m:
+            return "G4", ("`duck %s` is the owner's command. An agent never runs it; a person runs it "
+                          "from a terminal, where no hook fires. Ask the owner." % m.group(1))
     if gates.get("G4") and _WRITE_VERB.search(cmd):
-        for p in _mentioned_paths(cmd, cwd):
+        # paths named with a slash anywhere in the command, and the resolved targets of
+        # redirects, tee, cp, mv and sed -i, so a bare `> .helmet-duck.json` is seen too
+        for p in _mentioned_paths(cmd, cwd) + _overwrite_targets(cmd, cwd):
             if _under(p, protected):
                 return "G4", ("%s is protected: the duck, its state, the harness settings and "
                               "the override are written only by the owner (`duck override` "
                               "opens them for 30 minutes)." % p)
 
-    if gates.get("G2") and _GIT_COMMIT.search(cmd) and root is not None and cfg["evidence"].get("command"):
-        ok, why = _evidence_fresh(root, cfg)
-        if not ok:
-            return "G2", ("commit without evidence in %s: %s. Run `duck evidence` (it runs the "
-                          "project's declared check and records the result) and commit within "
-                          "%d minutes." % (root, why, int(cfg["evidence"].get("max_age_minutes", 30))))
+    if gates.get("G2"):
+        for target in _git_commit_dirs(cmd, cwd):
+            cfg2, root2 = _config(target)
+            if root2 is None or not cfg2["evidence"].get("command"):
+                continue
+            ok, why = _evidence_fresh(root2, cfg2)
+            if not ok:
+                return "G2", ("commit without evidence in %s: %s. Run `duck evidence` (it runs the "
+                              "project's declared check and records the result) and commit within "
+                              "%d minutes, without changing the tree in between."
+                              % (root2, why, int(cfg2["evidence"].get("max_age_minutes", 30))))
 
     if gates.get("G1"):
         st = _state(sid)
@@ -412,7 +539,11 @@ def _evidence_fresh(root, cfg):
     limit = 60 * float(cfg["evidence"].get("max_age_minutes", 30))
     if age > limit:
         return False, "evidence is %d minutes old" % (age / 60)
-    return True, "fresh"
+    if e.get("command") != cfg["evidence"].get("command"):
+        return False, "the evidence was recorded for a different check command"
+    if e.get("tree") != _tree_fingerprint(root):
+        return False, "the tree changed after the evidence run"
+    return True, "fresh, for this command and this tree"
 
 
 def cmd_pre(ev):
@@ -466,9 +597,8 @@ def cmd_post(ev):
     elif tool == "Bash":
         cmd = str(ti.get("command", ""))
         if _READ_VERB.search(cmd):
-            for p in _mentioned_paths(cmd, cwd):
-                if os.path.isfile(p):
-                    reads.add(p)
+            for p in _read_candidates(cmd, cwd):
+                reads.add(p)
     if len(reads) != before:
         st["reads"] = sorted(reads)
         _save_state(sid, st)
@@ -797,7 +927,7 @@ def cmd_evidence(cwd=None):
     p = _evidence_path(root)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"at": int(time.time()), "ok": ok, "command": command, "root": str(root),
-                             "head": head, "seconds": round(time.time() - t0, 1),
+                             "head": head, "tree": _tree_fingerprint(root), "seconds": round(time.time() - t0, 1),
                              "tail": (r.stdout + r.stderr)[-2000:]}, indent=1))
     _log({"event": "evidence", "decision": "PASS" if ok else "FAIL", "root": str(root)})
     print((r.stdout + r.stderr).strip()[-1500:])
@@ -1044,12 +1174,41 @@ def cmd_selftest():
         commit = {"session_id": sid, "tool_name": "Bash", "cwd": proj, "tool_input": {"command": "git commit -q -m x"}}
         ep = pathlib.Path(d) / "evidence" / (hashlib.sha1(str(pathlib.Path(proj).resolve()).encode()).hexdigest()[:16] + ".json")
         ep.parent.mkdir(parents=True, exist_ok=True)
-        ep.write_text(json.dumps({"at": int(time.time()), "ok": True}))
+        fp = _tree_fingerprint(pathlib.Path(proj))
+        ep.write_text(json.dumps({"at": int(time.time()), "ok": True, "command": "true", "tree": fp}))
         d_fresh, _, _, _ = _run_hook("pre", commit, env)
-        ep.write_text(json.dumps({"at": int(time.time()) - 3 * 3600, "ok": True}))
+        ep.write_text(json.dumps({"at": int(time.time()) - 3 * 3600, "ok": True, "command": "true", "tree": fp}))
         d_stale, _, _, _ = _run_hook("pre", commit, env)
-        ep.unlink()
         evidence_flips = (d_fresh, d_stale) == ("allow", "deny")
+        # evidence is bound to the command it ran and the tree it saw
+        ep.write_text(json.dumps({"at": int(time.time()), "ok": True, "command": "false", "tree": fp}))
+        d_other_cmd, _, _, _ = _run_hook("pre", commit, env)
+        ep.write_text(json.dumps({"at": int(time.time()), "ok": True, "command": "true", "tree": "0" * 64}))
+        d_other_tree, _, _, _ = _run_hook("pre", commit, env)
+        ep.unlink()
+        evidence_bound = (d_other_cmd, d_other_tree) == ("deny", "deny")
+
+        # a project file that switches gates off does not switch them off
+        pc = pathlib.Path(proj, PROJECT_CONFIG)
+        pc.write_text(json.dumps({"evidence": {"command": "true"}, "gates": {"G0": False, "G1": False, "G4": False}}))
+        d_disarm, _, _, _ = _run_hook("pre", canary_ev, env)
+        pc.write_text(json.dumps({"evidence": {"command": "true"}}))
+        config_holds = d_disarm == "deny"
+
+        # reads mean reading: wc is not a read, a bare filename after cat is
+        rsid = "selftest-reads"
+        ow_r = {"session_id": rsid, "tool_name": "Bash", "cwd": proj, "tool_input": {"command": "echo y >> existing.txt"}}
+        _run_hook("post", {"session_id": rsid, "tool_name": "Bash", "cwd": proj, "tool_input": {"command": "wc -l ./existing.txt"}}, env)
+        d_wc, _, _, _ = _run_hook("pre", ow_r, env)
+        _run_hook("post", {"session_id": rsid, "tool_name": "Bash", "cwd": proj, "tool_input": {"command": "cat existing.txt"}}, env)
+        d_cat, _, _, _ = _run_hook("pre", ow_r, env)
+        reads_mean_reading = (d_wc, d_cat) == ("deny", "allow")
+
+        # the project's own configuration stays protected even after it was read
+        _run_hook("post", {"session_id": rsid, "tool_name": "Bash", "cwd": proj, "tool_input": {"command": "cat .helmet-duck.json"}}, env)
+        d_cfg, _, _, _ = _run_hook("pre", {"session_id": rsid, "tool_name": "Bash", "cwd": proj,
+                                            "tool_input": {"command": "echo '{}' > .helmet-duck.json"}}, env)
+        config_write_refused = d_cfg == "deny"
 
         # the override must open a gate, and only while fresh
         ov = pathlib.Path(env["HELMET_DUCK_OVERRIDE"])
@@ -1096,7 +1255,8 @@ def cmd_selftest():
         never_denies = r.returncode == 0 and "permissionDecision" not in r.stdout and "DISSENT [" in r.stdout
 
     ok = (not missed and not false_pos and not bad_exit and not malformed and not slow
-          and read_ledger_flips and evidence_flips and override_works and can_fail and drift_closes
+          and read_ledger_flips and evidence_flips and evidence_bound and config_holds and reads_mean_reading and config_write_refused
+          and override_works and can_fail and drift_closes
           and not d_missed and not d_false and never_denies and d_ms < BUDGET_MS and acceptance_arms)
     print("helmet-duck %s -- selftest" % VERSION)
     print("  unarmed until accepted     : %s (%s -> %s)" % (acceptance_arms, d_unarmed, d_armed))
@@ -1107,6 +1267,10 @@ def cmd_selftest():
     print("  under %d ms                : %s%s" % (BUDGET_MS, not slow, "" if not slow else "  " + str(slow)))
     print("  read-ledger flips G1       : %s (%s -> %s)" % (read_ledger_flips, d1, d2))
     print("  evidence age flips G2      : %s (%s -> %s)" % (evidence_flips, d_fresh, d_stale))
+    print("  evidence bound to cmd+tree : %s (%s, %s)" % (evidence_bound, d_other_cmd, d_other_tree))
+    print("  project file cannot disarm : %s (%s)" % (config_holds, d_disarm))
+    print("  reads mean reading         : %s (wc %s, cat %s)" % (reads_mean_reading, d_wc, d_cat))
+    print("  project config write       : %s (%s after a read)" % (config_write_refused, d_cfg))
     print("  override opens, then ages  : %s (%s -> %s)" % (override_works, d_ov, d_ov_stale))
     print("  test can fail (mutated)    : %s" % can_fail)
     print("  drift fails closed         : %s" % drift_closes)
