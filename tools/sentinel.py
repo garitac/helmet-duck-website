@@ -6,7 +6,7 @@ needs no credentials: everything it checks is visible to any visitor. It rebuild
 the revision the live site declares and compares every published file byte for
 byte, then checks the redirects, the security headers, the honest 404, that the
 bucket is private, the TLS floor, the certificate, the DNS delegation and the
-hygiene records (in either mail state: none, or Amazon WorkMail), and the registrar lock.
+hygiene records (in either mail state: none, or Amazon SES), and the registrar lock.
 
 It never acts. It reports, and the exit code is the verdict:
   0  every law held; amber findings are printed, not fatal
@@ -64,12 +64,13 @@ EXPECT = {
     "expiry_red_days": 30,
 }
 # The zone is in exactly one of these mail states, told apart by its MX. The SPF must
-# match the state; in the workmail state the autodiscover CNAME and the DKIM selectors
+# match the state; in the ses state the MAIL FROM subdomain and the DKIM selectors
 # recorded in environments/prod.env.yaml must point at Amazon as well.
 MAIL = {
     "none": {"mx": {"0 ."}, "spf": "v=spf1 -all", "label": "null MX: no mail is received here"},
-    "workmail": {"mx": {"10 inbound-smtp.us-east-1.amazonaws.com."}, "spf": "v=spf1 include:amazonses.com -all",
-                 "autodiscover": "autodiscover.mail.us-east-1.awsapps.com", "label": "Amazon WorkMail"},
+    "ses": {"mx": {"10 inbound-smtp.us-east-1.amazonaws.com."}, "spf": "v=spf1 include:amazonses.com -all",
+            "mail_from_mx": {"10 feedback-smtp.us-east-1.amazonses.com."},
+            "mail_from_spf": "v=spf1 include:amazonses.com -all", "label": "Amazon SES, forwarded to the owner"},
 }
 RRTYPE = {"NS": 2, "CNAME": 5, "MX": 15, "TXT": 16, "CAA": 257}
 TAMPER = re.compile(r"<script\b|<iframe\b|<form\b|<object\b|<embed\b|\son[a-z]+\s*=|javascript:", re.I)
@@ -329,9 +330,11 @@ def check_dns(f):
         else:
             f.verdict("DMARC record", EXPECT["dmarc_policy"] in dm[0].replace(" ", "").lower(), dm[0])
 
-        if state == "workmail":
-            auto = {a.rstrip(".").lower() for a in doh("autodiscover." + SITE, "CNAME")}
-            f.verdict("autodiscover", auto == {MAIL["workmail"]["autodiscover"]}, ", ".join(sorted(auto)) or "no record")
+        if state == "ses":
+            mf_mx = {a.strip() for a in doh("mail." + SITE, "MX")}
+            mf_txt = [unquote_txt(a).strip() for a in doh("mail." + SITE, "TXT")]
+            f.verdict("MAIL FROM records", mf_mx == MAIL["ses"]["mail_from_mx"] and MAIL["ses"]["mail_from_spf"] in mf_txt,
+                      "mail.%s: %s; %s" % (SITE, ", ".join(sorted(mf_mx)) or "no MX", "; ".join(mf_txt) or "no TXT"))
             sels = contract_dkim_selectors()
             if not sels:
                 f.amber("DKIM", "selectors not yet recorded in environments/prod.env.yaml")
