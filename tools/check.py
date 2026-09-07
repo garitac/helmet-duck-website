@@ -10,8 +10,9 @@
      <script> tag and no external stylesheet or image may appear (the CSP forbids
      them); the whole dist/ must stay under the weight budget; no dotfile may
      reach dist/; every page must carry the revision marker.
-  5. every tools/*.py must compile, the sentry must pass its selftest, and every
-     workflow must pin its actions to a commit SHA and declare its permissions.
+  5. every tools/*.py and tools/console/*.py must compile, the sentry and the console
+     must pass their selftests, and every workflow must pin its actions to a commit SHA
+     and declare its permissions.
 
 Exit 0 only when everything holds. Findings are printed as a table.
 """
@@ -147,7 +148,7 @@ def check_tools(rows):
     synthetic log; every workflow pins its actions to a commit SHA and declares
     its permissions, as the repository's Actions settings require."""
     bad = []
-    for p in sorted((ROOT / "tools").glob("*.py")):
+    for p in sorted(list((ROOT / "tools").glob("*.py")) + list((ROOT / "tools" / "console").glob("*.py"))):
         try:
             compile(p.read_text(encoding="utf-8"), str(p), "exec")
         except SyntaxError as exc:
@@ -156,6 +157,9 @@ def check_tools(rows):
     r = subprocess.run([sys.executable, str(ROOT / "tools" / "sentry.py"), "--selftest"], capture_output=True, text=True)
     ok = r.returncode == 0 and r.stdout.strip().endswith("PASS")
     rows.append(("sentry selftest", ok, "" if ok else (r.stdout.strip().splitlines() or [r.stderr[-120:]])[-1]))
+    r = subprocess.run([sys.executable, str(ROOT / "tools" / "console" / "analytics.py"), "--selftest"], capture_output=True, text=True)
+    ok = r.returncode == 0 and r.stdout.strip().endswith("PASS")
+    rows.append(("console selftest", ok, "" if ok else (r.stdout.strip().splitlines() or [r.stderr[-120:]])[-1]))
     unpinned, unscoped = [], []
     for wf in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
         text = wf.read_text(encoding="utf-8")

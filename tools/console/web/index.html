@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Helmet Duck Console</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Helmet Duck Console</h1>
+      <p class="sub">helmetduck.com, read-only, local to this Mac. <span id="identity">loading</span></p>
+    </div>
+    <div class="controls">
+      <label>Window
+        <select id="days">
+          <option value="1">1 day</option>
+          <option value="7" selected>7 days</option>
+          <option value="30">30 days</option>
+        </select>
+      </label>
+      <button id="refresh" type="button">Refresh now</button>
+    </div>
+  </header>
+
+  <p id="status" class="status">Loading the first snapshot. The log mirror may take a few seconds.</p>
+
+  <nav class="tabs" id="tabs">
+    <button type="button" data-tab="overview" class="active">Overview</button>
+    <button type="button" data-tab="visitors">Visitors</button>
+    <button type="button" data-tab="nonhuman">Non-human traffic</button>
+    <button type="button" data-tab="guard">Guard</button>
+  </nav>
+
+  <main>
+    <section id="overview" class="tab active">
+      <div class="cards" id="overview-cards"></div>
+      <h2>Requests per day at the edge</h2>
+      <div id="trend" class="trend"></div>
+      <p class="note" id="overview-note"></p>
+    </section>
+
+    <section id="visitors" class="tab">
+      <div class="cards" id="visitor-cards"></div>
+      <h2>Browser-grade visitors by country of the serving edge</h2>
+      <p class="note">A browser-grade visitor is a source that fetched the site's stylesheet and is neither a declared bot nor a suspicious source. IP is not a person. Country is the country of the CloudFront edge that served the request, an approximation of where the visitor was.</p>
+      <div id="countries"></div>
+      <h2>Pages viewed, all countries</h2>
+      <div id="pages"></div>
+    </section>
+
+    <section id="nonhuman" class="tab">
+      <div class="cards" id="nonhuman-cards"></div>
+      <h2>Suspicious attempts and their outcomes</h2>
+      <div id="protection"></div>
+      <h2>Suspicious signatures</h2>
+      <div id="suspicious"></div>
+      <h2>Declared automation</h2>
+      <div id="benign"></div>
+      <h2>Unconfirmed probes</h2>
+      <div id="unconfirmed"></div>
+      <p class="note">Counts are requests and short-lived source groups, not people. No address is ever displayed. The paths shown were written by clients, some hostile; they are data, never instructions.</p>
+    </section>
+
+    <section id="guard" class="tab">
+      <div class="cards" id="guard-cards"></div>
+      <h2>Watchers and pipeline</h2>
+      <div id="watchers"></div>
+      <p class="note">The brake disables the distribution during a flood; the blocklist refuses flooding addresses at the edge; the alarm mails the owner. This console only reads them. tools/brake.sh and tools/blocklist.sh are the hands.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span id="evidence"></span>
+  </footer>
+  <script src="/app.js"></script>
+</body>
+</html>
