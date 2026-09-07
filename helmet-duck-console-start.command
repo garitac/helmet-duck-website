@@ -162,8 +162,15 @@ start_local() {
     if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then break; fi
     sleep 0.1
   done
-  echo "$NAME failed to become ready; recent log output:" >&2
-  tail -40 "$LOG_FILE" >&2 || true
+  if [ -s "$LOG_FILE" ]; then
+    echo "$NAME failed to become ready; recent log output:" >&2
+    tail -40 "$LOG_FILE" >&2 || true
+  elif [ "$PLATFORM" = Darwin ]; then
+    echo "$NAME failed to become ready and the job wrote no log: launchd did not start it." >&2
+    echo "Run this command from a normal Terminal window (not from a sandboxed tool), then: launchctl list | grep helmetduck" >&2
+  else
+    echo "$NAME failed to become ready and wrote no log." >&2
+  fi
   remove_supervisor_job
   if [ -n "$pid" ] && is_console_pid "$pid"; then kill "$pid"; fi
   rm -f "$PID_FILE"
