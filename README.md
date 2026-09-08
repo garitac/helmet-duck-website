@@ -2,13 +2,12 @@
 
 **Deterministic tools for coding agents, sold at https://helmetduck.com.** This repository
 holds the brand's storefront. Every product is developed in its own repository and carries
-the brand's name; the marketplace and the site here are where finished versions are sold.
+the brand's name; the marketplace at garitac/helmet-duck and the site here are where finished versions are sold.
 
 ## Map
 
 | Path | What it is |
 | --- | --- |
-| `.claude-plugin/marketplace.json` | The marketplace users add once. It lists every product by its repository. |
 | `site/` | helmetduck.com: static pages with a strict content-security policy and no scripts, built by `tools/build.py`. |
 | `infra/`, `environments/` | The CloudFormation stacks (site, roles, mail) and the deploy contract, `environments/prod.env.yaml`. |
 | `tools/` | `check.py`, the gate CI and the deploy run first; `build.py`; the owner's scripts (`apply.sh`, `mail.sh`, `brake.sh`, `blocklist.sh`, `smtp.sh`); the two watchers (`sentinel.py`, `sentry.py`, `board.sh`); the console under `tools/console/`, with its launcher. |
@@ -22,9 +21,10 @@ the brand's name; the marketplace and the site here are where finished versions 
 | Helmet Duck Bushido: gates, a dissent chair and a mirror for Claude Code and Codex | https://github.com/garitac/helmet-duck-bushido | 0.4.0, live on the marketplace and at helmetduck.com |
 | Helmet Duck Eyes: sight measured from rendered pixels | https://github.com/garitac/helmet-duck-eyes | in development; listed here when its first version is tagged |
 
-A finished version reaches the shelf through one pull request in this repository: the
-marketplace entry and the site change together, you merge, the manual deploy runs, and the
-sentinel confirms the live bytes within the hour. Development churn in a product never
+A finished version reaches the shelf through two small pull requests: one in the marketplace
+repository, https://github.com/garitac/helmet-duck, which changes the product's entry, and one
+here for its pages on the site. You merge both, the manual deploy runs, and the sentinel
+confirms the live bytes within the hour. Development churn in a product never
 touches the site.
 
 ## Install Helmet Duck Bushido (Claude Code)
