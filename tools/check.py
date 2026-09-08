@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
 """The gate CI and the deploy run before anything else: standard library only.
 
-This repository is the brand: the storefront helmetduck.com, its infrastructure, its
-watchers and the marketplace that lists the products. The products live in their own
-repositories with their own gates (garitac/helmet-duck-bushido, garitac/helmet-duck-eyes);
-nothing of theirs is checked here beyond the marketplace entry.
+This repository is the brand's storefront: helmetduck.com, its infrastructure and its
+watchers. The products live in their own repositories with their own gates
+(garitac/helmet-duck-bushido, garitac/helmet-duck-eyes), and the marketplace that lists
+them is garitac/helmet-duck, with its own gate. Nothing of theirs is checked here.
 
-  1. the marketplace must parse; every entry must name a source this file can account
-     for: a folder of this repository holding a plugin manifest that agrees on the
-     version, or a GitHub repository of the owner with a version pinned.
-  2. the site must build; every internal href/src must resolve inside dist/; no
+  1. the site must build; every internal href/src must resolve inside dist/; no
      <script> tag and no external stylesheet or image may appear (the CSP forbids
      them); the whole dist/ must stay under the weight budget; no dotfile may
      reach dist/; every page must carry the revision marker.
-  3. every tools/*.py and tools/console/*.py must compile, the sentry and the console
+  2. every tools/*.py and tools/console/*.py must compile, the sentry and the console
      must pass their selftests, and every workflow must pin its actions to a commit SHA
      and declare its permissions.
-  4. English is the only language of code, comments and copy.
+  3. English is the only language of code, comments and copy.
 
 Exit 0 only when everything holds. Findings are printed as a table.
 """
@@ -28,47 +25,9 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
-OWNER = "garitac"
 BUDGET_BYTES = 300 * 1024
 sys.path.insert(0, str(ROOT / "tools"))
 import build as sitebuild  # noqa: E402
-
-
-def check_marketplace(rows):
-    """The marketplace lists every product. A folder source must hold that plugin's
-    manifest and agree with it on the version; a GitHub source must be one of the
-    owner's repositories, named owner/name, with a version pinned."""
-    try:
-        market = json.loads(MARKETPLACE.read_text(encoding="utf-8"))
-        rows.append((".claude-plugin/marketplace.json", True, "%d product(s)" % len(market.get("plugins", []))))
-    except (OSError, ValueError) as exc:
-        rows.append((".claude-plugin/marketplace.json", False, str(exc)[:80]))
-        return
-    bad = []
-    for entry in market.get("plugins", []):
-        name, src = entry.get("name"), entry.get("source")
-        if isinstance(src, str):
-            manifest = ROOT / src / ".claude-plugin" / "plugin.json"
-            if not manifest.exists():
-                bad.append("%s: %s has no .claude-plugin/plugin.json" % (name, src))
-                continue
-            try:
-                version = json.loads(manifest.read_text(encoding="utf-8")).get("version")
-            except ValueError:
-                bad.append("%s: plugin.json unreadable" % name)
-                continue
-            if version != entry.get("version"):
-                bad.append("%s: marketplace says %s, plugin.json says %s" % (name, entry.get("version"), version))
-        elif isinstance(src, dict) and src.get("source") == "github":
-            repo = src.get("repo", "")
-            if not re.fullmatch(r"%s/[A-Za-z0-9._-]+" % re.escape(OWNER), repo):
-                bad.append("%s: repo %r is not one of %s's" % (name, repo, OWNER))
-            if not entry.get("version"):
-                bad.append("%s: no version pinned" % name)
-        else:
-            bad.append("%s: source %r not understood" % (name, src))
-    rows.append(("marketplace entries resolve", not bad, ", ".join(bad)[:140]))
 
 
 # Cyrillic, Hebrew and Arabic, Indic, Thai, Japanese kana, CJK ideographs, Hangul and
@@ -174,7 +133,6 @@ def check_tools(rows):
 
 def main():
     rows = []
-    check_marketplace(rows)
     check_tools(rows)
     check_english_only(rows)
     check_site(rows)
