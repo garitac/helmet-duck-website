@@ -1,51 +1,50 @@
 # Helmet Duck
 
 **Deterministic tools for coding agents, sold at https://helmetduck.com.** This repository
-holds the storefront and the first product. Each product is developed in its own folder or
-its own repository; the marketplace and the site here are where finished versions are sold.
+holds the brand's storefront. Every product is developed in its own repository and carries
+the brand's name; the marketplace and the site here are where finished versions are sold.
 
 ## Map
 
 | Path | What it is |
 | --- | --- |
-| `products/duck/` | The Helmet Duck plugin for Claude Code and Codex: gates, a dissent chair and a mirror. The folder is exactly what the plugin ships and nothing else: `duck.py`, its sealed `MANIFEST.json`, fixtures, hooks, skills, `RISKS.md`, `LICENSE`. Start at [products/duck/README.md](products/duck/README.md). |
-| `.claude-plugin/marketplace.json` | The marketplace users add once. It lists every product; a product developed in another repository is listed by repository. |
+| `.claude-plugin/marketplace.json` | The marketplace users add once. It lists every product by its repository. |
 | `site/` | helmetduck.com: static pages with a strict content-security policy and no scripts, built by `tools/build.py`. |
 | `infra/`, `environments/` | The CloudFormation stacks (site, roles, mail) and the deploy contract, `environments/prod.env.yaml`. |
 | `tools/` | `check.py`, the gate CI and the deploy run first; `build.py`; the owner's scripts (`apply.sh`, `mail.sh`, `brake.sh`, `blocklist.sh`, `smtp.sh`); the two watchers (`sentinel.py`, `sentry.py`, `board.sh`); the console under `tools/console/`, with its launcher. |
 | `docs/` | Runbooks for deploy, security, console and commerce; launch texts; a legal template. |
-| `SECURITY.md`, `LICENSE` | How to report a vulnerability; the licence for everything here. The plugin ships its own identical copy. |
+| `SECURITY.md`, `LICENSE` | How to report a vulnerability; the licence for everything here. Each product repository carries its own. |
 
 ## Products
 
 | Product | Where it is developed | State |
 | --- | --- | --- |
-| Helmet Duck, the plugin | `products/duck/` in this repository | 0.4.0, live on the marketplace and at helmetduck.com |
-| Helmet Eyes, deterministic sight for agents | https://github.com/garitac/helmet-eyes | in development; listed here when its first version is tagged |
+| Helmet Duck Bushido: gates, a dissent chair and a mirror for Claude Code and Codex | https://github.com/garitac/helmet-duck-bushido | 0.4.0, live on the marketplace and at helmetduck.com |
+| Helmet Duck Eyes: sight measured from rendered pixels | https://github.com/garitac/helmet-duck-eyes | in development; listed here when its first version is tagged |
 
 A finished version reaches the shelf through one pull request in this repository: the
 marketplace entry and the site change together, you merge, the manual deploy runs, and the
 sentinel confirms the live bytes within the hour. Development churn in a product never
 touches the site.
 
-## Install the duck (Claude Code)
+## Install Helmet Duck Bushido (Claude Code)
 
 ```
 /plugin marketplace add garitac/helmet-duck
-/plugin install helmet-duck@helmet-duck
+/plugin install helmet-duck-bushido@helmet-duck
 ```
 
-Then, from a terminal, record your acceptance of [RISKS.md](products/duck/RISKS.md) and seal
+Then, from a terminal, record your acceptance of [RISKS.md](https://github.com/garitac/helmet-duck-bushido/blob/main/RISKS.md) and seal
 the installed copy. You type these, never the agent, which is refused them:
 
 ```
-DUCK="$(ls -d ~/.claude/plugins/cache/helmet-duck/helmet-duck/*/duck.py | tail -1)"
+DUCK="$(ls -d ~/.claude/plugins/cache/helmet-duck/helmet-duck-bushido/*/duck.py | tail -1)"
 python3 "$DUCK" accept && python3 "$DUCK" seal
 python3 "$DUCK" status
 ```
 
-The full story, the gates, the commands and the Codex install are in
-[products/duck/README.md](products/duck/README.md).
+The full story, the gates, the commands and the Codex install are in the product's
+repository, https://github.com/garitac/helmet-duck-bushido.
 
 ## Site and pipeline
 

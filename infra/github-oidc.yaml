@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >-
-  GitHub Actions OIDC deploy role for garitac/helmet-duck: assumable only by this
+  GitHub Actions OIDC deploy role for garitac/helmet-duck-website: assumable only by this
   repository's `prod` GitHub Environment, allowed only to list and put objects in the
   site bucket and to invalidate the site distribution. No delete, no IAM, no
   CloudFormation, no Route 53, no ACM. Creates the account's GitHub OIDC provider only
@@ -21,7 +21,7 @@ Parameters:
     AllowedPattern: "^[A-Za-z0-9-]+$"
   GitHubRepository:
     Type: String
-    Default: helmet-duck
+    Default: helmet-duck-website
     AllowedPattern: "^[A-Za-z0-9_.-]+$"
   GitHubEnvironment:
     Type: String

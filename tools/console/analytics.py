@@ -454,14 +454,14 @@ def fetch_watchers():
     out = {}
     for wf in ("sentinel", "sentry", "ci", "deploy"):
         try:
-            r = subprocess.run([gh, "run", "list", "-R", "garitac/helmet-duck", "--workflow", "%s.yml" % wf, "--limit", "1",
+            r = subprocess.run([gh, "run", "list", "-R", "garitac/helmet-duck-website", "--workflow", "%s.yml" % wf, "--limit", "1",
                                 "--json", "conclusion,status,updatedAt,url"], capture_output=True, text=True, timeout=20)
             runs = json.loads(r.stdout) if r.returncode == 0 and r.stdout.strip() else []
             out[wf] = runs[0] if runs else {"conclusion": "none"}
         except (OSError, subprocess.TimeoutExpired, ValueError) as exc:
             out[wf] = {"conclusion": "unavailable", "error": str(exc)[:80]}
     try:
-        r = subprocess.run([gh, "pr", "list", "-R", "garitac/helmet-duck", "--json", "number"], capture_output=True, text=True, timeout=20)
+        r = subprocess.run([gh, "pr", "list", "-R", "garitac/helmet-duck-website", "--json", "number"], capture_output=True, text=True, timeout=20)
         out["openPullRequests"] = len(json.loads(r.stdout)) if r.returncode == 0 and r.stdout.strip() else None
     except (OSError, subprocess.TimeoutExpired, ValueError):
         out["openPullRequests"] = None

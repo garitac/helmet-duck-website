@@ -35,7 +35,7 @@ sign_in() {
 REGION=us-east-1
 ACCOUNT_EXPECTED=244206438585
 DOMAIN=helmetduck.com
-REPO=garitac/helmet-duck
+REPO=garitac/helmet-duck-website
 FRONTEND_STACK=helmet-duck-frontend-prod
 OIDC_STACK=helmet-duck-github-oidc
 MAIL_STACK=helmet-duck-mail-prod
@@ -110,6 +110,7 @@ echo "${PROVIDER:-none, the stack will create it}"
 echo "== stack $OIDC_STACK: deploy role"
 aws cloudformation deploy --template-file infra/github-oidc.yaml --stack-name "$OIDC_STACK" \
   --parameter-overrides "BucketName=$BUCKET" "DistributionId=$DIST" "ExistingOidcProviderArn=$PROVIDER" "LogBucketName=$LOGS" \
+  "GitHubOwner=${REPO%%/*}" "GitHubRepository=${REPO##*/}" \
   --capabilities CAPABILITY_NAMED_IAM --region "$REGION" --profile "$PROFILE" --no-fail-on-empty-changeset
 ROLE="$(out "$OIDC_STACK" DeployRoleArn)"
 SENTRY="$(out "$OIDC_STACK" SentryRoleArn)"

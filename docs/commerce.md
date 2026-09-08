@@ -57,7 +57,7 @@ Either way the sale carries no obligation of anyone's time.
 | `site/privacy.html` | Written; publishes with the next deploy |
 | `site/terms.html` | Written; publishes with the next deploy |
 | Commercial transactions disclosure (Act on Specified Commercial Transactions) | Template only, in `docs/legal/`. Needed only for sales where you are the seller to a consumer. Personal and Team licences are sold by the merchant of record, which carries the seller's obligations; invoices to companies are business transactions, which the Act does not cover. Confirm with a lawyer before the first direct consumer sale; until then the page, and your address on it, stay unpublished |
-| `site/risks.html` and `products/duck/RISKS.md` | Written; acceptance is recorded by `duck accept` and arms the gates |
+| `site/risks.html` and `RISKS.md` in garitac/helmet-duck-bushido | Written; acceptance is recorded by `duck accept` and arms the gates |
 
 ## 5. What was deliberately not done
 

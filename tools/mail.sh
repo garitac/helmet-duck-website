@@ -28,7 +28,7 @@ sign_in() {
 }
 REGION=us-east-1
 DOMAIN=helmetduck.com
-REPO=garitac/helmet-duck
+REPO=garitac/helmet-duck-website
 MAIL_STACK=helmet-duck-mail-prod
 cd "$(dirname "$0")/.."
 

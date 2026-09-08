@@ -1,9 +1,0 @@
-{
- "duck_sha256": "c8c29ccbfd0a562d5dbf7db5fc1691d27b3e78034517db09c35378e6425a8848",
- "fixtures_sha256": {
-  "dissent.json": "d41249a1cb6af2867ed72eeafa652a0f9b88c75e7e40c1ad06bfe90e8ecb184c",
-  "gates.json": "92b711f213bbce455e84c73420c34990c54d61297b199419b14db26ad4fcd0d0"
- },
- "version": "0.4.0",
- "sealed_at": 1788776786
-}

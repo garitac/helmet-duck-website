@@ -16,7 +16,7 @@ Helmet Duck is a plugin of hooks. A script, not the model, evaluates each rule,
 so the agent cannot talk its way past it:
 
     /plugin marketplace add garitac/helmet-duck
-    /plugin install helmet-duck@helmet-duck
+    /plugin install helmet-duck-bushido@helmet-duck
     duck accept
     duck seal
 

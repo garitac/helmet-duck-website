@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """The gate CI and the deploy run before anything else: standard library only.
 
-  1. products/duck/duck.py selftest must PASS.
-  2. the marketplace at the root must parse, every entry whose source is a folder of
-     this repository must hold a plugin.json that agrees on the version, and the duck's
-     own manifests, hooks and fixtures under products/duck must parse; hooks may
-     reference only files that exist under that plugin root; the root LICENSE and the
-     copy the plugin ships must be the same text.
-  3. every skills/*/SKILL.md must carry frontmatter whose description is a quoted
-     string (an unquoted colon silently empties the metadata at runtime).
-  4. the site must build; every internal href/src must resolve inside dist/; no
+This repository is the brand: the storefront helmetduck.com, its infrastructure, its
+watchers and the marketplace that lists the products. The products live in their own
+repositories with their own gates (garitac/helmet-duck-bushido, garitac/helmet-duck-eyes);
+nothing of theirs is checked here beyond the marketplace entry.
+
+  1. the marketplace must parse; every entry must name a source this file can account
+     for: a folder of this repository holding a plugin manifest that agrees on the
+     version, or a GitHub repository of the owner with a version pinned.
+  2. the site must build; every internal href/src must resolve inside dist/; no
      <script> tag and no external stylesheet or image may appear (the CSP forbids
      them); the whole dist/ must stay under the weight budget; no dotfile may
      reach dist/; every page must carry the revision marker.
-  5. every tools/*.py and tools/console/*.py must compile, the sentry and the console
+  3. every tools/*.py and tools/console/*.py must compile, the sentry and the console
      must pass their selftests, and every workflow must pin its actions to a commit SHA
      and declare its permissions.
+  4. English is the only language of code, comments and copy.
 
 Exit 0 only when everything holds. Findings are printed as a table.
 """
@@ -27,23 +28,17 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-PLUGIN = ROOT / "products" / "duck"          # the duck: exactly what the plugin ships
 MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
+OWNER = "garitac"
 BUDGET_BYTES = 300 * 1024
 sys.path.insert(0, str(ROOT / "tools"))
 import build as sitebuild  # noqa: E402
 
 
-def check_selftest(rows):
-    r = subprocess.run([sys.executable, str(PLUGIN / "duck.py"), "selftest"], capture_output=True, text=True)
-    ok = r.returncode == 0 and r.stdout.strip().endswith("PASS")
-    rows.append(("duck selftest", ok, "" if ok else r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr[-200:]))
-
-
 def check_marketplace(rows):
-    """The marketplace at the root lists every product. An entry whose source is a
-    folder of this repository must hold that plugin's manifest, and the two must agree
-    on the version; an entry that points at another repository is listed as such."""
+    """The marketplace lists every product. A folder source must hold that plugin's
+    manifest and agree with it on the version; a GitHub source must be one of the
+    owner's repositories, named owner/name, with a version pinned."""
     try:
         market = json.loads(MARKETPLACE.read_text(encoding="utf-8"))
         rows.append((".claude-plugin/marketplace.json", True, "%d product(s)" % len(market.get("plugins", []))))
@@ -53,58 +48,27 @@ def check_marketplace(rows):
     bad = []
     for entry in market.get("plugins", []):
         name, src = entry.get("name"), entry.get("source")
-        if not isinstance(src, str):
-            continue  # another repository: nothing to resolve here
-        manifest = ROOT / src / ".claude-plugin" / "plugin.json"
-        if not manifest.exists():
-            bad.append("%s: %s has no .claude-plugin/plugin.json" % (name, src))
-            continue
-        try:
-            version = json.loads(manifest.read_text(encoding="utf-8")).get("version")
-        except ValueError:
-            bad.append("%s: plugin.json unreadable" % name)
-            continue
-        if version != entry.get("version"):
-            bad.append("%s: marketplace says %s, plugin.json says %s" % (name, entry.get("version"), version))
-    rows.append(("marketplace entries resolve and agree on versions", not bad, ", ".join(bad)[:120]))
-
-
-def check_manifests(rows):
-    """The duck's own manifests, under its plugin root."""
-    for rel in (".claude-plugin/plugin.json", "hooks/hooks.json", ".codex-plugin/plugin.json", "codex/hooks.json",
-                "fixtures/gates.json", "fixtures/dissent.json", "MANIFEST.json"):
-        try:
-            json.loads((PLUGIN / rel).read_text(encoding="utf-8"))
-            rows.append(("products/duck/%s" % rel, True, ""))
-        except (OSError, ValueError) as exc:
-            rows.append(("products/duck/%s" % rel, False, str(exc)[:80]))
-    try:
-        versions = {}
-        m = re.search(r'^VERSION = "([^"]+)"$', (PLUGIN / "duck.py").read_text(encoding="utf-8"), re.M)
-        versions["duck.py"] = m.group(1) if m else None
-        for rel in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "MANIFEST.json"):
-            versions[rel] = json.loads((PLUGIN / rel).read_text(encoding="utf-8")).get("version")
-        agree = len(set(versions.values())) == 1 and None not in versions.values()
-        rows.append(("duck version agrees across duck.py, manifests and seal", agree,
-                     ", ".join("%s %s" % kv for kv in versions.items()) if not agree else versions["duck.py"]))
-        missing = []
-        for rel in ("hooks/hooks.json", "codex/hooks.json"):
-            hooks = json.loads((PLUGIN / rel).read_text())["hooks"]
-            for event, groups in hooks.items():
-                for g in groups:
-                    for h in g["hooks"]:
-                        for m in re.finditer(r'\$\{?(?:CLAUDE_)?PLUGIN_ROOT\}?/([\w./-]+)', h["command"]):
-                            if not (PLUGIN / m.group(1)).exists():
-                                missing.append("%s %s: %s" % (rel, event, m.group(1)))
-        rows.append(("hooks reference existing files under the plugin root", not missing, ", ".join(missing)))
-        codex = json.loads((PLUGIN / ".codex-plugin/plugin.json").read_text())
-        refs = [codex.get("hooks", ""), codex.get("skills", ""), (codex.get("interface") or {}).get("logo", "")]
-        bad = [r for r in refs if r and not (PLUGIN / r).exists()]
-        rows.append(("codex manifest paths exist under the plugin root", not bad, ", ".join(bad)))
-    except (OSError, ValueError, KeyError) as exc:
-        rows.append(("hooks reference existing files under the plugin root", False, str(exc)[:80]))
-    same = (ROOT / "LICENSE").read_bytes() == (PLUGIN / "LICENSE").read_bytes()
-    rows.append(("root LICENSE and the plugin's LICENSE are the same text", same, "" if same else "they differ"))
+        if isinstance(src, str):
+            manifest = ROOT / src / ".claude-plugin" / "plugin.json"
+            if not manifest.exists():
+                bad.append("%s: %s has no .claude-plugin/plugin.json" % (name, src))
+                continue
+            try:
+                version = json.loads(manifest.read_text(encoding="utf-8")).get("version")
+            except ValueError:
+                bad.append("%s: plugin.json unreadable" % name)
+                continue
+            if version != entry.get("version"):
+                bad.append("%s: marketplace says %s, plugin.json says %s" % (name, entry.get("version"), version))
+        elif isinstance(src, dict) and src.get("source") == "github":
+            repo = src.get("repo", "")
+            if not re.fullmatch(r"%s/[A-Za-z0-9._-]+" % re.escape(OWNER), repo):
+                bad.append("%s: repo %r is not one of %s's" % (name, repo, OWNER))
+            if not entry.get("version"):
+                bad.append("%s: no version pinned" % name)
+        else:
+            bad.append("%s: source %r not understood" % (name, src))
+    rows.append(("marketplace entries resolve", not bad, ", ".join(bad)[:140]))
 
 
 # Cyrillic, Hebrew and Arabic, Indic, Thai, Japanese kana, CJK ideographs, Hangul and
@@ -124,7 +88,7 @@ def check_english_only(rows):
         if not p.is_file() or p.suffix not in TEXT_SUFFIXES:
             continue
         rel = p.relative_to(ROOT)
-        if rel.parts[0] in (".git", "dist", "node_modules", "__pycache__"):
+        if rel.parts[0] in (".git", "dist", "node_modules", "__pycache__", ".console-cache"):
             continue
         try:
             for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
@@ -133,14 +97,6 @@ def check_english_only(rows):
         except (OSError, UnicodeDecodeError):
             continue
     rows.append(("english only (no non-Latin scripts)", not hits, ", ".join(hits[:6]) + (" ..." if len(hits) > 6 else "")))
-
-
-def check_skills(rows):
-    for skill in sorted((PLUGIN / "skills").glob("*/SKILL.md")):
-        text = skill.read_text(encoding="utf-8")
-        m = re.match(r"---\n(.*?)\n---\n", text, re.S)
-        ok = bool(m) and bool(re.search(r'^description: "[^"\n]+"$', m.group(1), re.M))
-        rows.append(("skill %s frontmatter" % skill.parent.name, ok, "" if ok else "description must be a quoted string"))
 
 
 def check_site(rows):
@@ -188,9 +144,9 @@ def check_site(rows):
 
 
 def check_tools(rows):
-    """The watchers and the build must compile; the sentry proves itself on a
-    synthetic log; every workflow pins its actions to a commit SHA and declares
-    its permissions, as the repository's Actions settings require."""
+    """The watchers and the build must compile; the sentry and the console prove
+    themselves on synthetic input; every workflow pins its actions to a commit SHA and
+    declares its permissions, as the repository's Actions settings require."""
     bad = []
     for p in sorted(list((ROOT / "tools").glob("*.py")) + list((ROOT / "tools" / "console").glob("*.py"))):
         try:
@@ -218,10 +174,7 @@ def check_tools(rows):
 
 def main():
     rows = []
-    check_selftest(rows)
     check_marketplace(rows)
-    check_manifests(rows)
-    check_skills(rows)
     check_tools(rows)
     check_english_only(rows)
     check_site(rows)

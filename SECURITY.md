@@ -6,7 +6,7 @@ privileges. A defect here matters more than in most software, so please report i
 ## Reporting a vulnerability
 
 Use GitHub's private vulnerability reporting: open the Security tab of
-https://github.com/garitac/helmet-duck and choose "Report a vulnerability". Do not
+https://github.com/garitac/helmet-duck-website and choose "Report a vulnerability". Do not
 open a public issue for a security defect. Write in English, so the report and the
 fix can be read by everyone who depends on them.
 
@@ -24,17 +24,19 @@ release notes if you want it.
 
 ## Scope
 
-In scope: `products/duck/duck.py` and its gates, the hook wiring for Claude Code and Codex, the
-seal and the fail-closed behaviour, the site helmetduck.com and its deploy pipeline
+In scope: the products in their own repositories, garitac/helmet-duck-bushido (`duck.py` and its
+gates, the hook wiring for Claude Code and Codex, the
+seal and the fail-closed behaviour) and garitac/helmet-duck-eyes; the site helmetduck.com and its deploy pipeline
 (a way to change the live site or to publish without the owner is a vulnerability).
 
-Out of scope: the limitations listed in [RISKS.md](products/duck/RISKS.md), which are documented
+Out of scope: the limitations listed in [RISKS.md](https://github.com/garitac/helmet-duck-bushido/blob/main/RISKS.md), which are documented
 rather than hidden; the behaviour of the agent itself; and third-party services
 such as GitHub, AWS or the merchant of record.
 
 ## Supply chain
 
-Releases come only from https://github.com/garitac/helmet-duck. The `main` branch
+Releases of the products come only from their repositories, garitac/helmet-duck-bushido
+and garitac/helmet-duck-eyes; the site only from garitac/helmet-duck-website. Each `main`
 is protected: no force-push, no deletion, every change through a pull request that
 passes the gate, merged as a squash commit that GitHub signs; every action pinned to
 a commit SHA.

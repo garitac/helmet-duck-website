@@ -22,7 +22,7 @@ The security posture and the watchers are described in [security.md](security.md
 | Brake tool | `tools/brake.sh` | Owner: status, release early, switch the brake off or on. |
 | SMTP credentials | `tools/smtp.sh` | Owner: an IAM user that may only send from the domain, one key, the SMTP password derived locally with AWS's published algorithm and shown once; rotate and revoke. Gmail's "Send mail as" stays a few clicks. |
 | Edge blocklist | in `infra/frontend.yaml`, `tools/blocklist.sh` | A keeper function wakes on each access-log file and writes flooding addresses into the edge function's code between two markers; the function answers them 429. The tool shows, clears and tests the list. |
-| Identity | `infra/github-oidc.yaml` | Deploy role trusting only `garitac/helmet-duck` Environment `prod`; sentry role trusting only Environment `sentry`, reading the log bucket only. Creates the account's OIDC provider only if none exists. |
+| Identity | `infra/github-oidc.yaml` | Deploy role trusting only `garitac/helmet-duck-website` Environment `prod`; sentry role trusting only Environment `sentry`, reading the log bucket only. Creates the account's OIDC provider only if none exists. |
 | Apply | `tools/apply.sh` | Idempotent: the three stacks (mail when a forwarding address exists, site, roles), both GitHub Environments (protected branches only) and their variables, the registrar lock on both domains, the contract file. |
 | Mail | `infra/mail.yaml`, `tools/mail.sh` | Amazon SES in us-east-1: domain identity with DKIM and MAIL FROM, receipt rule storing each message in a private bucket for 90 days, a forwarder function to the owner's mailbox, the owner's mailbox verified for the sandbox. The script runs the apply, requests production access, waits for DKIM, opens the contract pull request. SMTP credentials for replying from Gmail are the owner's. |
 | Contract | `environments/prod.env.yaml` | The one place the deploy targets are written down. |
@@ -55,8 +55,8 @@ The security posture and the watchers are described in [security.md](security.md
    `dns_hygiene_required` and `transfer_lock_required` to `True` in `tools/sentinel.py`.
 
    ```
-   gh workflow run sentinel.yml -R garitac/helmet-duck --ref main
-   gh workflow run sentry.yml -R garitac/helmet-duck --ref main
+   gh workflow run sentinel.yml -R garitac/helmet-duck-website --ref main
+   gh workflow run sentry.yml -R garitac/helmet-duck-website --ref main
    ```
 
 ## Publish
@@ -64,8 +64,8 @@ The security posture and the watchers are described in [security.md](security.md
 Prove the pipeline without publishing, then publish:
 
 ```
-gh workflow run deploy.yml -R garitac/helmet-duck --ref main -f dry_run=true
-gh workflow run deploy.yml -R garitac/helmet-duck --ref main -f dry_run=false
+gh workflow run deploy.yml -R garitac/helmet-duck-website --ref main -f dry_run=true
+gh workflow run deploy.yml -R garitac/helmet-duck-website --ref main -f dry_run=false
 ```
 
 ## Rollback
