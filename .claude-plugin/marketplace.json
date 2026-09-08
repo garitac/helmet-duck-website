@@ -1,12 +1,12 @@
 {
   "name": "helmet-duck",
-  "description": "Helmet Duck: the rules an AI coding agent cannot skip. Gates, a dissent chair and a mirror for Claude Code.",
+  "description": "Helmet Duck: deterministic tools for coding agents. Bushido: gates, a dissent chair and a mirror for Claude Code and Codex. Eyes: sight measured from rendered pixels.",
   "owner": {"name": "Carlos Garita", "url": "https://helmetduck.com"},
   "plugins": [
     {
-      "name": "helmet-duck",
-      "source": "./products/duck",
-      "description": "Gates, dissent chair and mirror for Claude Code: the rules an agent cannot skip.",
+      "name": "helmet-duck-bushido",
+      "source": {"source": "github", "repo": "garitac/helmet-duck-bushido"},
+      "description": "Gates, dissent chair and mirror for Claude Code and Codex: the rules an agent cannot skip.",
       "version": "0.4.0"
     }
   ]

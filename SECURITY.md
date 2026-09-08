@@ -24,11 +24,12 @@ release notes if you want it.
 
 ## Scope
 
-In scope: `products/duck/duck.py` and its gates, the hook wiring for Claude Code and Codex, the
-seal and the fail-closed behaviour, the site helmetduck.com and its deploy pipeline
+In scope: the products in their own repositories, garitac/helmet-duck-bushido (`duck.py` and its
+gates, the hook wiring for Claude Code and Codex, the
+seal and the fail-closed behaviour) and garitac/helmet-duck-eyes; the site helmetduck.com and its deploy pipeline
 (a way to change the live site or to publish without the owner is a vulnerability).
 
-Out of scope: the limitations listed in [RISKS.md](products/duck/RISKS.md), which are documented
+Out of scope: the limitations listed in [RISKS.md](https://github.com/garitac/helmet-duck-bushido/blob/main/RISKS.md), which are documented
 rather than hidden; the behaviour of the agent itself; and third-party services
 such as GitHub, AWS or the merchant of record.
 

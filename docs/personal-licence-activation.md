@@ -7,7 +7,7 @@ Lemon Squeezy "My Orders" page.
 1. Install Helmet Duck in Claude Code if you have not yet:
 
        /plugin marketplace add garitac/helmet-duck
-       /plugin install helmet-duck@helmet-duck
+       /plugin install helmet-duck-bushido@helmet-duck
 
 2. Read the risks page, https://helmetduck.com/risks.html, then from a terminal:
 

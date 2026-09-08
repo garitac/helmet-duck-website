@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-# Helmet Duck command wrapper: `duck status`, `duck evidence`, `duck claim ...`
-exec python3 "$(cd "$(dirname "$0")/.." && pwd)/duck.py" "$@"

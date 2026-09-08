@@ -33,9 +33,9 @@
       <h2>Install (Claude Code)</h2>
       <p>Read the <a href="/risks.html">risks and mitigations</a> first; installing means you accept them. Then two commands. Python 3.9 or later, standard library only. Nothing leaves your machine except a licence activation you start yourself.</p>
 <pre><code>/plugin marketplace add garitac/helmet-duck
-/plugin install helmet-duck@helmet-duck</code></pre>
-      <p>The duck refuses nothing until you record your acceptance, which arms the gates; then seal the installed copy so an edited duck fails closed. Both are typed by you in a terminal, never by the agent, which is refused them. The plugin installs under <code>~/.claude/plugins/cache/helmet-duck/helmet-duck/&lt;version&gt;/</code>; these lines find it, accept, seal and show the result.</p>
-<pre><code>DUCK="$(ls -d ~/.claude/plugins/cache/helmet-duck/helmet-duck/*/duck.py | tail -1)"
+/plugin install helmet-duck-bushido@helmet-duck</code></pre>
+      <p>The duck refuses nothing until you record your acceptance, which arms the gates; then seal the installed copy so an edited duck fails closed. Both are typed by you in a terminal, never by the agent, which is refused them. The plugin installs under <code>~/.claude/plugins/cache/helmet-duck/helmet-duck-bushido/&lt;version&gt;/</code>; these lines find it, accept, seal and show the result.</p>
+<pre><code>DUCK="$(ls -d ~/.claude/plugins/cache/helmet-duck/helmet-duck-bushido/*/duck.py | tail -1)"
 python3 "$DUCK" accept &amp;&amp; python3 "$DUCK" seal
 python3 "$DUCK" status</code></pre>
       <p>Expected in the status: <code>risks accepted (armed) : yes</code> and <code>sealed : yes</code>. Then prove the deny channel from inside a session: ask the agent to run <code>echo HELMET-DUCK-CANARY-DENY</code>, and the harness answers <code>GATE G0: canary: the deny channel is live</code>.</p>
