@@ -7,6 +7,9 @@ the revision the live site declares and compares every published file byte for
 byte, then checks the redirects, the security headers, the honest 404, that the
 bucket is private, the TLS floor, the certificate, the DNS delegation and the
 hygiene records (in either mail state: none, or Amazon SES), and the registrar lock.
+It also holds the risks page to its own promise: that the plugin ships the same text
+as RISKS.md. Since the plugin moved to its own repository, neither repository's gate
+can see both texts, and only this law compares them.
 
 It never acts. It reports, and the exit code is the verdict:
   0  every law held; amber findings are printed, not fatal
@@ -21,6 +24,7 @@ the fallback) for DNS answers and rdap.verisign.com for the registration. A thir
 party being unreachable is amber, never red: their outage is not our incident.
 """
 import argparse
+import html
 import io
 import json
 import os
@@ -376,6 +380,100 @@ def check_registration(f):
 
 
 # ------------------------------------------------------------------ output
+# The risks page says the plugin ships the same text. The plugin now lives in its own
+# repository, so nothing in either gate sees both documents; this law does. The preamble
+# differs by design (the page dates the statement, the file points at the page), so the
+# comparison starts at the first section and runs to the end.
+RISKS_MD_URL = "https://raw.githubusercontent.com/garitac/helmet-duck-bushido/main/RISKS.md"
+RISKS_FROM = "## What it can and cannot do to your system"
+SENTENCE_FLOOR = 20          # below this a fragment is a label, not a published statement
+
+
+def plain(text):
+    """Prose as a reader receives it: no markup, one kind of quote, no URLs, single spaces."""
+    text = re.sub(r"<(script|style)\b.*?</\1>", " ", text, flags=re.S | re.I)
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)          # markdown links keep their words
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html.unescape(text)
+    for a, b in (("\u2019", "'"), ("\u2018", "'"), ("\u201c", '"'), ("\u201d", '"'),
+                 ("\u2014", "-"), ("\u2013", "-"), ("\u00a0", " "), ("\u00b7", " ")):
+        text = text.replace(a, b)
+    text = re.sub(r"https?://\S+", " ", text)                    # a link's text, not its address
+    text = re.sub(r"[`*|]", " ", text)                            # table pipes, code ticks, emphasis
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def sentences(text):
+    """Published statements only. A fragment that does not end in terminal punctuation is a
+    table heading, a column label or a stub; a short one that does is still a statement, and
+    "A modified copy is not Helmet Duck." is exactly the kind a length floor would miss."""
+    out = []
+    for s in re.split(r"(?<=[.!?]) ", text):
+        s = s.strip()
+        if len(s) >= SENTENCE_FLOOR and s[-1:] in (".", "!", "?"):
+            out.append(s)
+    return out
+
+
+def md_blocks(text):
+    """Markdown as the blocks a reader sees: one per heading, table cell, list item and
+    paragraph. Sentences are taken inside a block, never across two: a heading and the
+    sentence under it are separate on the page, and gluing them invents a sentence that
+    no page can contain."""
+    blocks, para = [], []
+
+    def flush():
+        if para:
+            blocks.append(" ".join(para))
+            del para[:]
+
+    for line in text.splitlines():
+        s = line.strip()
+        if not s:
+            flush()
+        elif s.startswith("|"):                          # a table row: each cell stands alone
+            flush()
+            blocks.extend(s.strip("|").split("|"))
+        elif s.startswith("#"):
+            flush()
+            blocks.append(s.lstrip("#").strip())
+        elif s.startswith(("- ", "* ")):
+            flush()
+            para.append(s[2:])
+        else:
+            para.append(s)
+    flush()
+    return blocks
+
+
+def check_risks_text(f):
+    """Every sentence the plugin ships must be on the page the site publishes."""
+    st, _, body = fetch(BASE + "risks.html")
+    if st != 200:
+        f.red("risks page", "status %d" % st)
+        return
+    page = plain(body.decode("utf-8", "replace"))
+    try:
+        st2, _, md = fetch(RISKS_MD_URL, follow=True)
+    except Exception as e:                               # noqa: BLE001  their outage is not our incident
+        f.amber("shipped RISKS.md unreachable", "%s: %s" % (type(e).__name__, str(e)[:120]))
+        return
+    if st2 != 200:
+        f.amber("shipped RISKS.md unreachable", "status %d from the plugin repository" % st2)
+        return
+    text = md.decode("utf-8", "replace")
+    start = text.find(RISKS_FROM)
+    if start < 0:
+        f.amber("shipped RISKS.md", "no section %r to compare from" % RISKS_FROM)
+        return
+    shipped = [s for block in md_blocks(text[start:]) for s in sentences(plain(block))]
+    missing = [s for s in shipped if s not in page]
+    f.verdict("risks page carries the shipped RISKS.md", not missing,
+              "%d sentences compared%s" % (len(shipped),
+                                           "" if not missing else "; %d missing, first: %s" % (len(missing), missing[0][:110])),
+              fail="amber")
+
+
 def render(f, md):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     reds, ambers, oks = f.count("red"), f.count("amber"), f.count("ok")
@@ -403,7 +501,8 @@ def main():
     hdr = {}
     for name, fn in (("pages", check_pages), ("redirects", check_redirects), ("bucket", check_bucket),
                      ("tls", check_tls), ("certificate", check_certificate),
-                     ("dns", check_dns), ("registration", check_registration)):
+                     ("dns", check_dns), ("registration", check_registration),
+                     ("risks text", check_risks_text)):
         try:
             result = fn(f)
             if name == "pages" and result is not None:
