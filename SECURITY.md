@@ -6,7 +6,7 @@ privileges. A defect here matters more than in most software, so please report i
 ## Reporting a vulnerability
 
 Use GitHub's private vulnerability reporting: open the Security tab of
-https://github.com/garitac/helmet-duck and choose "Report a vulnerability". Do not
+https://github.com/garitac/helmet-duck-website and choose "Report a vulnerability". Do not
 open a public issue for a security defect. Write in English, so the report and the
 fix can be read by everyone who depends on them.
 
@@ -35,7 +35,8 @@ such as GitHub, AWS or the merchant of record.
 
 ## Supply chain
 
-Releases come only from https://github.com/garitac/helmet-duck. The `main` branch
+Releases of the products come only from their repositories, garitac/helmet-duck-bushido
+and garitac/helmet-duck-eyes; the site only from garitac/helmet-duck-website. Each `main`
 is protected: no force-push, no deletion, every change through a pull request that
 passes the gate, merged as a squash commit that GitHub signs; every action pinned to
 a commit SHA.

@@ -103,6 +103,6 @@ curl -sI https://helmetduck.com/                       # headers
 curl -sI --tls-max 1.1 https://helmetduck.com/; echo $? # 35 = refused
 curl -sI https://helmet-duck-prod-site-244206438585.s3.amazonaws.com/index.html   # 403
 python3 tools/sentinel.py                              # every law, from your machine
-gh api repos/garitac/helmet-duck/branches/main/protection --jq '{enforce_admins: .enforce_admins.enabled, checks: .required_status_checks.contexts, signatures: .required_signatures.enabled}'
-gh api repos/garitac/helmet-duck/actions/permissions --jq .sha_pinning_required
+gh api repos/garitac/helmet-duck-website/branches/main/protection --jq '{enforce_admins: .enforce_admins.enabled, checks: .required_status_checks.contexts, signatures: .required_signatures.enabled}'
+gh api repos/garitac/helmet-duck-website/actions/permissions --jq .sha_pinning_required
 ```
