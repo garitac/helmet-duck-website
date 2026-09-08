@@ -5,7 +5,7 @@
   "plugins": [
     {
       "name": "helmet-duck",
-      "source": "./",
+      "source": "./products/duck",
       "description": "Gates, dissent chair and mirror for Claude Code: the rules an agent cannot skip.",
       "version": "0.4.0"
     }
