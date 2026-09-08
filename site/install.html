@@ -42,7 +42,7 @@ python3 "$DUCK" status</code></pre>
       <p>To arm the commit gate in a project, declare its check command in <code>.helmet-duck.json</code> at the project root:</p>
 <pre><code>{"evidence": {"command": "python3 -m pytest -q"}}</code></pre>
       <h2>Install (Codex)</h2>
-      <p>Codex sends the same hook events and accepts the same answers; only its file-edit tool differs, and the duck reads the paths out of each patch. Clone the repository somewhere permanent, copy <code>codex/hooks.json</code> to <code>~/.codex/hooks.json</code> with <code>$PLUGIN_ROOT</code> replaced by that path, then run <code>/hooks</code> inside Codex and trust each hook. Codex runs no hook you have not reviewed. Then accept and seal as above. The plugin manifest for Codex's marketplace ships in the repository too.</p>
+      <p>Codex sends the same hook events and accepts the same answers; only its file-edit tool differs, and the duck reads the paths out of each patch. Clone the plugin's repository, <a href="https://github.com/garitac/helmet-duck-bushido">github.com/garitac/helmet-duck-bushido</a>, somewhere permanent, copy <code>codex/hooks.json</code> to <code>~/.codex/hooks.json</code> with <code>$PLUGIN_ROOT</code> replaced by that path, then run <code>/hooks</code> inside Codex and trust each hook. Codex runs no hook you have not reviewed. Then accept and seal as above. The plugin manifest for Codex's marketplace ships in that repository too.</p>
     </section>
   </main>
 
