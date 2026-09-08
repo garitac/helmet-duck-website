@@ -28,7 +28,7 @@ Install the command once (already done on the owner's Mac):
 
 ```bash
 mkdir -p "$HOME/.local/bin"
-ln -sf "$PWD/helmet-duck-console-start.command" "$HOME/.local/bin/helmet-duck-console-start"
+ln -sf "$PWD/tools/console/helmet-duck-console-start.command" "$HOME/.local/bin/helmet-duck-console-start"
 ```
 
 ## What it shows

@@ -3,7 +3,7 @@ set -euo pipefail
 umask 077
 
 # Helmet Duck Console lifecycle launcher. Install on the PATH once with:
-#   ln -sf "$PWD/helmet-duck-console-start.command" "$HOME/.local/bin/helmet-duck-console-start"
+#   ln -sf "$PWD/tools/console/helmet-duck-console-start.command" "$HOME/.local/bin/helmet-duck-console-start"
 #
 # Runs the private, read-only console on 127.0.0.1 as a per-user launchd job on
 # macOS (a detached process elsewhere), opens the browser, and proves the running
@@ -16,7 +16,7 @@ while [ -L "$SOURCE" ]; do
   TARGET="$(readlink "$SOURCE")"
   case "$TARGET" in /*) SOURCE="$TARGET" ;; *) SOURCE="$SOURCE_DIR/$TARGET" ;; esac
 done
-REPO_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+REPO_DIR="$(cd -P "$(dirname "$SOURCE")/../.." && pwd)"   # this file lives in tools/console/
 DATA_DIR="$REPO_DIR/.console-cache/launcher"
 
 ACTION=start

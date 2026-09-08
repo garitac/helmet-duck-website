@@ -18,10 +18,10 @@ applies the same gates to them. `codex/hooks.json` is the Codex wiring;
    changes.
 4. From a terminal, read https://helmetduck.com/risks.html, then:
 
-       python3 ~/helmet-duck/duck.py accept
-       python3 ~/helmet-duck/duck.py seal
+       python3 ~/helmet-duck/products/duck/duck.py accept
+       python3 ~/helmet-duck/products/duck/duck.py seal
 
-5. Confirm: `python3 ~/helmet-duck/duck.py status` shows `harness : codex` when
+5. Confirm: `python3 ~/helmet-duck/products/duck/duck.py status` shows `harness : codex` when
    run through a hook, and `risks accepted (armed) : yes`.
 
 Hooks are enabled by default in current Codex versions. If yours predates that,
@@ -41,7 +41,8 @@ with `</dev/null`.
 ## Install as a plugin
 
 The manifest is `.codex-plugin/plugin.json`; it points Codex at
-`codex/hooks.json` and the shared `skills/`. Codex installs plugins from a
+`codex/hooks.json` and the shared `skills/`. The plugin root is `products/duck`
+of the repository, so a marketplace entry's path points there. Codex installs plugins from a
 marketplace, and even an installed plugin's hooks stay off until you review and
 trust them in `/hooks`. Follow OpenAI's current plugin installation guide for the
 marketplace step; the manifest here is ready for it.
