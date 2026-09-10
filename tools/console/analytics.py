@@ -6,6 +6,11 @@ bucket (mirrored to a local, ignored folder), the brake's state, the edge
 blocklist, the alarm, the watchers' last runs and the mail account. It never
 enables anything, changes AWS, or sends visitor data anywhere.
 
+It reaches AWS as its own identity: a key held in the login Keychain that may make
+only the reads below and does not expire (`tools/console-key.sh`). With no such key
+it falls back to the owner's Identity Center session, which expires after twelve
+hours and leaves the console with nothing to show.
+
 What the numbers mean, stated once so the page can repeat it:
   - A "browser-grade visitor" is a source address that fetched the site's
     stylesheet during the window and is neither a declared bot nor a suspicious
@@ -43,6 +48,8 @@ import sentry  # noqa: E402  the same log parser and probe patterns the sentry u
 CACHE_ROOT = ROOT / ".console-cache"
 LOG_MIRROR = CACHE_ROOT / "logs"
 REGION = "us-east-1"
+CONSOLE_PROFILE = "helmet-duck-console"      # the console's own read-only key; no expiry
+ADMIN_PROFILE = "kanjishisho-bootstrap-admin"  # the owner's Identity Center session; twelve hours
 SITE_URL = "https://helmetduck.com/"
 UA = "helmet-duck-console/1 (local, read-only)"
 AWS_TIMEOUT = 40
@@ -129,8 +136,24 @@ def load_contract(root=ROOT):
             "site": grab("site"), "accountId": grab("account_id"), "mail": grab("provider")}
 
 
+def profile_configured(name):
+    path = pathlib.Path(os.environ.get("AWS_CONFIG_FILE") or (pathlib.Path.home() / ".aws" / "config"))
+    try:
+        return re.search(r"^\[profile %s\]" % re.escape(name), path.read_text(encoding="utf-8"), re.M) is not None
+    except OSError:
+        return False
+
+
 def aws_profile():
-    return os.environ.get("HELMET_DUCK_ADMIN_PROFILE", "kanjishisho-bootstrap-admin")
+    """The console's own profile when it is configured, the owner's session otherwise.
+
+    An explicit HELMET_DUCK_ADMIN_PROFILE still wins, so a second account or a dry run
+    stays one variable away.
+    """
+    named = (os.environ.get("HELMET_DUCK_ADMIN_PROFILE") or "").strip()
+    if named:
+        return named
+    return CONSOLE_PROFILE if profile_configured(CONSOLE_PROFILE) else ADMIN_PROFILE
 
 
 def run_aws(args, timeout=AWS_TIMEOUT, parse=True):
@@ -153,8 +176,12 @@ def aws_session():
         me = run_aws(["sts", "get-caller-identity"])
         return {"available": True, "arn": me.get("Arn", ""), "profile": aws_profile()}
     except RuntimeError as exc:
-        return {"available": False, "profile": aws_profile(), "error": str(exc),
-                "hint": "aws sso login --profile %s" % aws_profile()}
+        profile = aws_profile()
+        hint = ("The console key is missing or refused; run: tools/console-key.sh status"
+                if profile == CONSOLE_PROFILE else
+                "Sign in with: aws sso login --profile %s (or give the console a key that does not "
+                "expire: tools/console-key.sh create)" % profile)
+        return {"available": False, "profile": profile, "error": str(exc), "hint": hint}
 
 
 # ------------------------------------------------------------------ live health and edge metrics

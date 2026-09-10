@@ -2,7 +2,10 @@
 
 Static site, private S3 bucket behind CloudFront with Origin Access Control, a
 certificate issued and DNS-validated in the account's own Route 53 hosted zone,
-deployed by GitHub Actions through OIDC. No long-lived keys anywhere. Everything
+deployed by GitHub Actions through OIDC. Nothing in the deploy path holds a
+long-lived key. Two standing keys exist elsewhere, each least-privilege and each
+outside this repository: the SMTP sender's, which lives in Gmail, and the console's,
+which lives in the owner's login Keychain. Everything
 lives in `us-east-1` because CloudFront reads certificates only from that region.
 The security posture and the watchers are described in [security.md](security.md).
 
@@ -21,6 +24,7 @@ The security posture and the watchers are described in [security.md](security.md
 | Infra | `infra/frontend.yaml` | Certificate, site bucket, log bucket, OAC, headers policy, edge router, distribution with logging, A/AAAA records, CAA, MX, SPF, DMARC, and (with an email) SNS topic, request-flood alarm, monthly budget, and the brake: a function that disables the distribution when the alarm fires and re-enables it after a growing wait. |
 | Brake tool | `tools/brake.sh` | Owner: status, release early, switch the brake off or on. |
 | SMTP credentials | `tools/smtp.sh` | Owner: an IAM user that may only send from the domain, one key, the SMTP password derived locally with AWS's published algorithm and shown once; rotate and revoke. Gmail's "Send mail as" stays a few clicks. |
+| Console key | `tools/console-key.sh` | Owner: an IAM user that may read only what the console shows and is denied every other action, one access key held in the login Keychain and never written to a file, and the AWS profile that reads it back. The console then needs no session that expires. `status` probes every call the console makes and proves that a write is refused; `rotate` and `revoke`. |
 | Edge blocklist | in `infra/frontend.yaml`, `tools/blocklist.sh` | A keeper function wakes on each access-log file and writes flooding addresses into the edge function's code between two markers; the function answers them 429. The tool shows, clears and tests the list. |
 | Identity | `infra/github-oidc.yaml` | Deploy role trusting only `garitac/helmet-duck-website` Environment `prod`; sentry role trusting only Environment `sentry`, reading the log bucket only. Creates the account's OIDC provider only if none exists. |
 | Apply | `tools/apply.sh` | Idempotent: the three stacks (mail when a forwarding address exists, site, roles), both GitHub Environments (protected branches only) and their variables, the registrar lock on both domains, the contract file. |
