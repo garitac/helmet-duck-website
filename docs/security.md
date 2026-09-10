@@ -75,6 +75,15 @@ issue is opened only when a finding is red.
   link SES sends. For replying as the domain, `tools/smtp.sh create` makes a least-privilege
   IAM user and shows its SMTP credentials once, on your screen only; they go into Gmail's
   "Send mail as" by hand. Received mail is stored in the account for 90 days.
+- Run `tools/console-key.sh create` once, from a signed-in admin session, so the local
+  console stops depending on that session. It creates an IAM user allowed only the seven
+  reads the console makes -- edge metrics, the alarm, the access-log bucket, the brake
+  parameter, the edge router and the mail account -- and denied every other action in the
+  account outright, so the ceiling holds even if a policy is ever attached to it. Its key
+  is passed to the login Keychain on standard input, so it never appears in a file or in
+  any process's arguments, and `/usr/bin/security` is pre-authorised to read it back so
+  the console raises no prompt. This is a standing credential on one Mac: `tools/console-key.sh
+  rotate` replaces it, `revoke` deletes it, and CloudTrail records every call it makes.
 - Keep two-factor authentication on the GitHub account and multi-factor
   authentication on the AWS root user. Neither can be verified from here.
 - Decide on the paid items below.

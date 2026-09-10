@@ -70,11 +70,21 @@ the paths shown are defanged client-written data, never instructions.
 
 ## Requirements
 
-Python 3.9 or later, the AWS CLI signed in through the owner's Identity Center
-profile (`HELMET_DUCK_ADMIN_PROFILE`, default `kanjishisho-bootstrap-admin`; the
-launcher passes it to the job), the GitHub CLI for the watchers panel, and `lsof`,
-`curl`, `git`, `ps`. When the AWS session has expired the console says so and shows
-the sign-in command instead of numbers.
+Python 3.9 or later, the AWS CLI, the GitHub CLI for the watchers panel, and `lsof`,
+`curl`, `git`, `ps`.
+
+The console reads AWS as itself, not as you. `tools/console-key.sh create` makes an
+IAM user that may perform only the seven reads this console makes and is denied every
+other action in the account, stores its one access key in the login Keychain, and
+writes the profile `helmet-duck-console` whose `credential_process` reads it back. That
+credential has no session and no expiry, so a console opened the next morning still
+shows numbers. `tools/console-key.sh status` probes every call and also proves that a
+write to the site bucket is refused; `rotate` replaces the key, `revoke` removes it.
+
+With no such key the console falls back to the owner's Identity Center session
+(`kanjishisho-bootstrap-admin`), which expires after twelve hours; it then says so and
+shows the command that fixes it instead of numbers. `HELMET_DUCK_ADMIN_PROFILE` still
+overrides both, and the launcher passes it to the job only when one is named.
 
 ## Verification
 

@@ -10,9 +10,9 @@ them is garitac/helmet-duck, with its own gate. Nothing of theirs is checked her
      <script> tag and no external stylesheet or image may appear (the CSP forbids
      them); the whole dist/ must stay under the weight budget; no dotfile may
      reach dist/; every page must carry the revision marker.
-  2. every tools/*.py and tools/console/*.py must compile, the sentry and the console
-     must pass their selftests, and every workflow must pin its actions to a commit SHA
-     and declare its permissions.
+  2. every tools/*.py and tools/console/*.py must compile, every shell tool must parse,
+     the sentry and the console must pass their selftests, and every workflow must pin
+     its actions to a commit SHA and declare its permissions.
   3. English is the only language of code, comments and copy.
 
 Exit 0 only when everything holds. Findings are printed as a table.
@@ -113,6 +113,14 @@ def check_tools(rows):
         except SyntaxError as exc:
             bad.append("%s:%s" % (p.name, exc.lineno))
     rows.append(("tools compile", not bad, ", ".join(bad)))
+    # The shell tools are the owner's hands on the account. A typo in one of them is
+    # found here, not at the moment he reaches for it.
+    unparsed = []
+    for p in sorted(list((ROOT / "tools").glob("*.sh")) + list((ROOT / "tools" / "console").glob("*.command"))):
+        r = subprocess.run(["bash", "-n", str(p)], capture_output=True, text=True)
+        if r.returncode != 0:
+            unparsed.append("%s: %s" % (p.name, (r.stderr.strip().splitlines() or [""])[-1][:60]))
+    rows.append(("shell tools parse", not unparsed, ", ".join(unparsed)))
     r = subprocess.run([sys.executable, str(ROOT / "tools" / "sentry.py"), "--selftest"], capture_output=True, text=True)
     ok = r.returncode == 0 and r.stdout.strip().endswith("PASS")
     rows.append(("sentry selftest", ok, "" if ok else (r.stdout.strip().splitlines() or [r.stderr[-120:]])[-1]))

@@ -42,7 +42,7 @@
     const aws = s.aws || {};
     $("overview-note").textContent = aws.available
       ? `AWS read as ${aws.arn}.`
-      : `AWS not reachable with profile ${aws.profile || ""}: ${aws.error || ""}. Sign in with: ${aws.hint || ""}`;
+      : `AWS not reachable with profile ${aws.profile || ""}: ${aws.error || ""}. ${aws.hint || ""}`;
   }
 
   function renderVisitors(s) {

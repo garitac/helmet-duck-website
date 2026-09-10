@@ -22,7 +22,7 @@ DATA_DIR="$REPO_DIR/.console-cache/launcher"
 ACTION=start
 OPEN_BROWSER=true
 PORT="${HELMET_DUCK_CONSOLE_PORT:-4318}"
-PROFILE="${HELMET_DUCK_ADMIN_PROFILE:-kanjishisho-bootstrap-admin}"
+PROFILE="${HELMET_DUCK_ADMIN_PROFILE:-}"   # empty: let the console choose its own key over the owner's session
 NAME="Helmet Duck Console"
 
 usage() {
@@ -142,8 +142,9 @@ start_local() {
   fi
   if [ -e "$PID_FILE" ] && ! clear_demonstrably_stale_pid; then die "launcher PID state cannot safely identify a managed process"; fi
   remove_supervisor_job
-  local env_args=(HOME="$HOME" PATH="$PATH" HELMET_DUCK_ADMIN_PROFILE="$PROFILE" HELMET_DUCK_AWS_BIN="$AWS_BIN"
+  local env_args=(HOME="$HOME" PATH="$PATH" HELMET_DUCK_AWS_BIN="$AWS_BIN"
                   HELMET_DUCK_GH_BIN="$GH_BIN" HELMET_DUCK_CONSOLE_REVISION="$EXPECTED_REVISION")
+  [ -z "$PROFILE" ] || env_args+=(HELMET_DUCK_ADMIN_PROFILE="$PROFILE")
   local mode=detached
   [ -e "$LOG_FILE" ] && mv -f "$LOG_FILE" "$LOG_FILE.prev"    # a fresh log is the evidence that launchd spawned the job
   if [ "$PLATFORM" = Darwin ]; then
