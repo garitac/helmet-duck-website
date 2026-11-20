@@ -33,7 +33,6 @@ sign_in
 out() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --profile "$PROFILE" \
         --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue | [0]" --output text; }
 FN="$(out EdgeFunctionName)"; FN="${FN##*/}"          # the API wants the name; tolerate an ARN
-LOGS="$(out LogBucketName)"
 TMP="$(mktemp -d)"
 PAUSED=""; ORIGINAL_LIMIT=""
 cleanup() {
@@ -83,6 +82,7 @@ case "${1:-status}" in
     python3 - "$TMP/fn.js" <<'PY'
 import re, sys
 p = sys.argv[1]; code = open(p).read()
+code = re.sub(r"^/\*KEEPER_LOCK:.*?\*/\n", "", code, flags=re.S)
 open(p, "w").write(re.sub(r"/\*BLOCKLIST\*/.*?/\*END\*/", "/*BLOCKLIST*/{}/*END*/", code, flags=re.S))
 PY
     CFG="$(aws cloudfront describe-function --name "$FN" --stage DEVELOPMENT --profile "$PROFILE" --query FunctionSummary.FunctionConfig --output json)"
