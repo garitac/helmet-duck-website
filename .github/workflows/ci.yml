@@ -30,3 +30,5 @@ jobs:
           persist-credentials: false
       - name: Verify the plugin and build the site
         run: python3 tools/check.py
+      - name: Verify the traffic keeper and embedded infrastructure source
+        run: python3 tools/render_keeper.py --check && python3 tools/test_keeper.py
