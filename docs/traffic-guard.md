@@ -56,8 +56,8 @@ and existing CloudFront function are reused. Eight SSM **Standard** parameters
 at **standard throughput** have no storage or API fee under AWS's published
 pricing. The deployed account setting was checked before rollout; higher
 throughput must stay disabled. Writes explicitly request Standard tier and never
-upgrade automatically. There is no provisioned Lambda concurrency; reserved
-concurrency of one merely serializes the existing worker.
+upgrade automatically. There is no provisioned or reserved Lambda concurrency and no account quota
+increase. A short lease in the existing edge function serializes state changes.
 
 Existing Lambda, S3, CloudFront, SNS and CloudWatch usage is still metered; code
 changes cannot promise that an AWS invoice will never vary. The state calls and
@@ -74,7 +74,13 @@ Log timing: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/s
 `infra/keeper.py` is the source. Run `python3 tools/render_keeper.py` to embed it
 in `infra/frontend.yaml`; CI checks they match. State writes are checkpointed
 before publishing, so a retry can finish a failed publication or notification.
-The worker has reserved concurrency one to prevent lost state updates. The IAM
+An ETag compare-and-swap lease in the DEVELOPMENT edge code prevents lost state
+updates. The lease expires after 120 seconds, beyond the Lambda hard timeout of
+60 seconds. Acquisition is fail-fast; a busy worker is retried by existing Lambda
+asynchronous delivery (normally two retries), not a new queue or paid polling
+loop. Under sustained contention, a log event can exhaust those retries; this is
+another small-site capacity limit. The lease is released in a finally block and
+never changes viewer behavior. The IAM
 role can read/write only its keeper-state prefix, in addition to its existing
 scoped log, edge-function and alert-topic permissions.
 
@@ -107,3 +113,9 @@ in the existing edge code when the next real log arrives.
 On rollback, restore the previous keeper code and threshold through the stack.
 Keep current live edge bans until expiry, or deliberately use the owner clear
 operation. Never use a whole-site content deployment to deploy this guard.
+
+The first rollout on 2026-11-20 rolled back cleanly because the account's Lambda
+quota is 10 and AWS requires 10 unreserved slots. AWS rejected a request for a
+minimal increase to 11 (it requires requests above 1,000). No quota increase was
+made. The final implementation uses the existing CloudFront ETag lease instead,
+so it works within the current quota without buying or reserving capacity.

@@ -1,7 +1,7 @@
 """Log-delivery-driven IP blocking; no per-viewer AWS calls or paid state store.
 
 Embedded in frontend.yaml by tools/render_keeper.py. Standard parameters only,
-standard throughput, and one Lambda execution at a time. Never log raw IPs.
+standard throughput, and an optimistic lease on the existing edge function. Never log raw IPs.
 """
 import base64
 import collections
@@ -14,6 +14,7 @@ import os
 import re
 import time
 import zlib
+import uuid
 
 import boto3
 
@@ -26,6 +27,7 @@ FRESH = 3600  # Ignore evidence older than an hour, rather than punish a later v
 FIRST, REPEAT = 3600, 86400
 SHARDS = 8
 MARK = re.compile(r'/\*BLOCKLIST\*/(.*?)/\*END\*/', re.S)
+LOCK = re.compile(r'^/\*KEEPER_LOCK:(.*?)\*/\n', re.S)
 
 
 def stamp(ts):
@@ -167,8 +169,38 @@ def edge_read(stage):
     return got, code, json.loads(match.group(1))
 
 
-def publish(blocks):
+def acquire_lease(now):
+    # CloudFront's ETag is the compare-and-swap primitive. No new billed service,
+    # waiting loop, or account concurrency increase is needed. The 120s lease
+    # exceeds the worker's hard 60s timeout, so an expired owner cannot still run.
+    got, code, _ = edge_read('DEVELOPMENT')
+    held = LOCK.match(code)
+    if held and json.loads(held.group(1))['until'] > now:
+        raise RuntimeError('Keeper lease busy; Lambda asynchronous delivery will retry')
+    token = uuid.uuid4().hex
+    code = '/*KEEPER_LOCK:' + json.dumps({'id': token, 'until': now + 120}) + '*/\n' + LOCK.sub('', code)
+    if len(code.encode()) > 10000:
+        raise RuntimeError('Keeper lease cannot fit; existing live function preserved')
+    cfg = cf.describe_function(Name=FN, Stage='DEVELOPMENT')['FunctionSummary']['FunctionConfig']
+    cf.update_function(Name=FN, IfMatch=got['ETag'], FunctionConfig=cfg, FunctionCode=code.encode())
+    return token
+
+
+def release_lease(token):
+    got, code, _ = edge_read('DEVELOPMENT')
+    held = LOCK.match(code)
+    if not held or json.loads(held.group(1))['id'] != token:
+        raise RuntimeError('Keeper lease ownership changed; refusing to overwrite development code')
+    cfg = cf.describe_function(Name=FN, Stage='DEVELOPMENT')['FunctionSummary']['FunctionConfig']
+    cf.update_function(Name=FN, IfMatch=got['ETag'], FunctionConfig=cfg,
+                       FunctionCode=LOCK.sub('', code).encode())
+
+
+def publish(blocks, token):
     dev, code, current = edge_read('DEVELOPMENT')
+    held = LOCK.match(code)
+    if not held or json.loads(held.group(1))['id'] != token:
+        raise RuntimeError('Keeper lease lost before publication')
     match = MARK.search(code)
     code = code[:match.start(1)] + json.dumps(blocks, separators=(',', ':')) + code[match.end(1):]
     # Correct Retry-After for one-day bans, without another edge request/API call.
@@ -177,7 +209,7 @@ def publish(blocks):
     if len(code.encode()) > 10000:
         raise RuntimeError('Edge blocklist capacity exhausted; existing edge bans preserved')
     _, live_code, _ = edge_read('LIVE')
-    if code == live_code:
+    if LOCK.sub('', code) == LOCK.sub('', live_code):
         return
     cfg = cf.describe_function(Name=FN, Stage='DEVELOPMENT')['FunctionSummary']['FunctionConfig']
     updated = cf.update_function(Name=FN, IfMatch=dev['ETag'], FunctionConfig=cfg, FunctionCode=code.encode())
@@ -185,10 +217,17 @@ def publish(blocks):
 
 
 def handler(event, _):
-    now = int(time.time())
-    d = event.get('detail') or {}
-    if not d:
+    if not event.get('detail'):
         return {'ignored': 'not an S3 log event'}
+    now = int(time.time())
+    token = acquire_lease(now)
+    try:
+        return process(event['detail'], now, token)
+    finally:
+        release_lease(token)
+
+
+def process(d, now, token):
     raw = s3.get_object(Bucket=d['bucket']['name'], Key=d['object']['key'])['Body'].read()
     if d['object']['key'].endswith('.gz'):
         raw = gzip.decompress(raw)
@@ -209,7 +248,7 @@ def handler(event, _):
     pending = {ip: e for state in states.values() for ip, e in state.items() if e.get('pending')}
     blocks = {ip: t for ip, t in live.items() if t > now}
     blocks.update({ip: e['until'] for ip, e in pending.items() if e['until'] > now})
-    publish(blocks)
+    publish(blocks, token)
     alerts = [e['detail'] for e in pending.values() if e['until'] > now]
     if alerts:
         lines = [

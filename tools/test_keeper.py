@@ -191,10 +191,25 @@ class Integration(unittest.TestCase):
         self.assertFalse(self.mail.messages)
     def test_manual_clear_does_not_reapply_acknowledged_state(self):
         self.run_event()
-        self.edge.live = self.edge.dev = self.edge.live.replace(k.MARK.search(self.edge.live).group(1), '{}')
+        self.edge.live = self.edge.dev = k.LOCK.sub('', self.edge.live.replace(k.MARK.search(self.edge.live).group(1), '{}'))
         self.run_event()
         self.assertNotIn(IP, self.edge.live)
         self.assertEqual(len(self.mail.messages), 1)
+    def test_lease_excludes_another_worker(self):
+        token = k.acquire_lease(NOW)
+        with self.assertRaisesRegex(RuntimeError, 'lease busy'): k.acquire_lease(NOW+1)
+        k.release_lease(token)
+        next_token = k.acquire_lease(NOW+2)
+        k.release_lease(next_token)
+    def test_crashed_lease_recovers_after_hard_timeout(self):
+        old = k.acquire_lease(NOW)
+        new = k.acquire_lease(NOW+121)
+        with self.assertRaisesRegex(RuntimeError, 'ownership changed'): k.release_lease(old)
+        k.release_lease(new)
+    def test_failure_always_releases_lease(self):
+        self.edge.fail = True
+        with self.assertRaises(RuntimeError): self.run_event()
+        self.assertIsNone(k.LOCK.match(self.edge.dev))
     def test_cross_file_end_to_end(self):
         self.raw = logfile(rows(25))
         self.run_event()
