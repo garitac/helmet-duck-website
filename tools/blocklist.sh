@@ -3,14 +3,16 @@
 #
 #   tools/blocklist.sh status    the addresses currently refused at the edge, and until when
 #   tools/blocklist.sh clear     empty the list and publish the edge function
-#   tools/blocklist.sh test      prove the path end to end with a documentation address
+#   tools/blocklist.sh test      run offline policy and retry regression tests
 #
-# The list lives inside the edge function's code (infra/frontend.yaml), between
-# the markers /*BLOCKLIST*/ and /*END*/, written by the keeper function each time
-# a log file shows an address at or above BlockAt requests. `test` uploads a
-# synthetic log file in which 192.0.2.1 (reserved for documentation, never routed)
-# makes 700 requests, waits for the keeper, shows the list, then clears it.
+# The keeper combines request timestamps across log files in free Standard
+# parameters; more than 50 in five minutes triggers a temporary block.
+# test is entirely offline. clear pauses the keeper, waits for its maximum
+# invocation duration, clears its state and the edge list, then resumes it.
 set -euo pipefail
+if [ "${1:-status}" = test ]; then
+  exec python3 "$(dirname "$0")/test_keeper.py"
+fi
 
 PROFILE="${HELMET_DUCK_ADMIN_PROFILE:-kanji-shisho}"
 # Sign in with the profile's own mechanism: Identity Center (aws sso login) when the
@@ -32,7 +34,19 @@ out() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGI
         --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue | [0]" --output text; }
 FN="$(out EdgeFunctionName)"; FN="${FN##*/}"          # the API wants the name; tolerate an ARN
 LOGS="$(out LogBucketName)"
-TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+TMP="$(mktemp -d)"
+PAUSED=""; ORIGINAL_LIMIT=""
+cleanup() {
+  if [ -n "$PAUSED" ]; then
+    if [ "$ORIGINAL_LIMIT" = None ]; then
+      aws lambda delete-function-concurrency --function-name "$KEEPER" --region "$REGION" --profile "$PROFILE" >/dev/null
+    else
+      aws lambda put-function-concurrency --function-name "$KEEPER" --reserved-concurrent-executions "$ORIGINAL_LIMIT" --region "$REGION" --profile "$PROFILE" >/dev/null
+    fi
+  fi
+  rm -rf "$TMP"
+}
+trap cleanup EXIT
 
 fetch() {  # the DEVELOPMENT stage holds the latest code; prints the ETag
   aws cloudfront get-function --name "$FN" --stage DEVELOPMENT --profile "$PROFILE" "$TMP/fn.js" --query ETag --output text
@@ -55,6 +69,16 @@ case "${1:-status}" in
   status)
     fetch >/dev/null; show ;;
   clear)
+    KEEPER="$(out KeeperFunctionName)"
+    ORIGINAL_LIMIT="$(aws lambda get-function-concurrency --function-name "$KEEPER" --region "$REGION" --profile "$PROFILE" --query ReservedConcurrentExecutions --output text)"
+    MAX_WAIT="$(aws lambda get-function-configuration --function-name "$KEEPER" --region "$REGION" --profile "$PROFILE" --query Timeout --output text)"
+    aws lambda put-function-concurrency --function-name "$KEEPER" --reserved-concurrent-executions 0 --region "$REGION" --profile "$PROFILE" >/dev/null
+    PAUSED=1
+    echo "keeper paused; waiting up to $MAX_WAIT seconds for an in-flight invocation"
+    for (( i=0; i<MAX_WAIT; i++ )); do sleep 1; done
+    for i in {0..7}; do
+      aws ssm put-parameter --name "/helmet-duck/prod/keeper/state/$i" --type String --tier Standard --value '{}' --overwrite --region "$REGION" --profile "$PROFILE" >/dev/null
+    done
     ETAG="$(fetch)"
     python3 - "$TMP/fn.js" <<'PY'
 import re, sys
@@ -65,27 +89,6 @@ PY
     NEW="$(aws cloudfront update-function --name "$FN" --if-match "$ETAG" --function-config "$CFG" --function-code "fileb://$TMP/fn.js" --profile "$PROFILE" --query ETag --output text)"
     aws cloudfront publish-function --name "$FN" --if-match "$NEW" --profile "$PROFILE" >/dev/null
     echo "blocklist cleared and published; live at every edge within a minute" ;;
-  test)
-    python3 - "$TMP/selftest.gz" <<'PY'
-import gzip, sys, time
-fields = "date time x-edge-location sc-bytes c-ip cs-method cs(Host) cs-uri-stem sc-status".split()
-t = time.gmtime()
-rows = ["\t".join([time.strftime("%Y-%m-%d", t), time.strftime("%H:%M:%S", t), "SELF", "0", "192.0.2.1", "GET", "helmetduck.com", "/", "200"])] * 700
-open(sys.argv[1], "wb").write(gzip.compress(("#Version: 1.0\n#Fields: " + " ".join(fields) + "\n" + "\n".join(rows) + "\n").encode()))
-PY
-    for old in $(aws s3 ls "s3://$LOGS/cloudfront/" --profile "$PROFILE" | awk '/selftest\./ {print $4}'); do
-      aws s3 rm "s3://$LOGS/cloudfront/$old" --profile "$PROFILE" --only-show-errors   # a file left by an earlier interrupted test
-    done
-    KEY="cloudfront/selftest.$(date -u +%Y%m%d-%H%M%S).gz"
-    aws s3 cp "$TMP/selftest.gz" "s3://$LOGS/$KEY" --profile "$PROFILE" --only-show-errors
-    echo "uploaded a synthetic log file: 700 requests from 192.0.2.1; waiting for the keeper"
-    for i in $(seq 1 12); do
-      sleep 10; fetch >/dev/null
-      if grep -q '192.0.2.1' "$TMP/fn.js"; then echo "listed after about $((i * 10)) seconds:"; show; break; fi
-      [ "$i" = 12 ] && { echo "not listed after two minutes; read the keeper's log in CloudWatch"; exit 1; }
-    done
-    aws s3 rm "s3://$LOGS/$KEY" --profile "$PROFILE" --only-show-errors
-    "$0" clear ;;
   *)
     echo "usage: tools/blocklist.sh status|clear|test"; exit 2 ;;
 esac
